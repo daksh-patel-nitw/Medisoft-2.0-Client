@@ -1,0 +1,31 @@
+{
+  "name": "medisoft_client_2.0",
+  "version": "1.0.0",
+  "description": "A Next.js application for the Medisoft 2.0 client",
+  "homepage": "https://github.com/daksh-patel-nitw/Medisoft-2.0-Client#readme",
+  "bugs": {
+    "url": "https://github.com/daksh-patel-nitw/Medisoft-2.0-Client/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/daksh-patel-nitw/Medisoft-2.0-Client.git"
+  },
+  "license": "ISC",
+  "author": "Daksh Patel",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^6.5.0",
+    "@mui/material": "^6.5.0",
+    "next": "^16.2.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  }
+}
