@@ -16,7 +16,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { toast } from 'react-toastify';
-import { apis } from '../../Services/commonServices';
+import { apis } from '../../services/commonServices';
 
 // NOTE: Make sure these exist in your utils file!
 import { 

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Autocomplete, TextField, Box, Typography } from '@mui/material';
 import { debounce } from '@mui/material/utils';
 import MedicationIcon from "@mui/icons-material/Medication";
-import { apis } from '../Services/commonServices';
+import { apis } from '../services/commonServices';
 import useMedicineStore from '../store/useMedicineStore'; // <-- Import Zustand Store
 
 export const MedicineAutocomplete = ({ index, setHasMore, setFilteredString, setFilteredMedicines, setMedicine }) => {

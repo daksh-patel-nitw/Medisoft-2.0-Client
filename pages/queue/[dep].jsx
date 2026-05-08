@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Grid from '@mui/material/Grid2';
 import { Box, Typography, Paper } from '@mui/material';
-import { apis } from '../../Services/commonServices';
+import { apis } from '../../services/commonServices';
 
 export default function QueueScreenPage() {
   const router = useRouter();

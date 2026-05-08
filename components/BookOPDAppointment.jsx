@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import PersonIcon from "@mui/icons-material/Person";
 import { toast } from 'react-toastify';
-import { apis } from '../Services/commonServices';
+import { apis } from '../services/commonServices';
 import usePatientStore from '../store/usePatientStore'; // <-- Import Zustand Store
 
 // Appointment Form Values

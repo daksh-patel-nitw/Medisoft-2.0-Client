@@ -1,7 +1,7 @@
 import React, { useState, useEffect, memo } from "react";
 import { Grid2, Card, CardContent, TextField, Autocomplete, Button, Typography, Box } from "@mui/material";
 import { toast } from "react-toastify";
-import { apis } from "../../Services/commonServices"; 
+import { apis } from "../../services/commonServices"; 
 import { initialMedicineState, checkNewMedicine, arr1, arr2 } from '../../utils/pharmacyUtils'; 
 
 // ==========================================

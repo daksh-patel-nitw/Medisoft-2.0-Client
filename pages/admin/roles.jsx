@@ -20,7 +20,7 @@ import {
   Typography,
   CircularProgress
 } from '@mui/material';
-import { apis } from '../../Services/commonServices';
+import { apis } from '../../services/commonServices';
 
 export default function RoleManagementPage() {
   const [loginEmp, setLoginEmp] = useState([]);

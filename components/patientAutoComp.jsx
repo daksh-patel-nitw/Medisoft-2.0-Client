@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Autocomplete, TextField, Box, Typography } from '@mui/material';
 import { debounce } from '@mui/material/utils';
 import PersonIcon from "@mui/icons-material/Person";
-import { apis } from '../Services/commonServices';
+import { apis } from '../services/commonServices';
 import usePatientStore from '../store/usePatientStore'; // <-- Import Zustand Store
 
 const arr = ["pname", "pid", "mobile"];

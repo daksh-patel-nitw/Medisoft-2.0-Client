@@ -23,7 +23,7 @@ import { Delete, Edit } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 
 // Make sure these paths match your project structure!
-import { apis } from '../../Services/commonServices';
+import { apis } from '../../services/commonServices';
 import TimingsPicker from '../../components/TimingsAutoComp';
 
 export default function ManageTestsPage() {

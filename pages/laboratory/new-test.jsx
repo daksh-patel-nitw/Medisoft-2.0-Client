@@ -12,7 +12,7 @@ import Grid from '@mui/material/Grid2';
 import { toast } from 'react-toastify';
 
 // Make sure these utilities and components exist in your project!
-import { apis } from '../../Services/commonServices';
+import { apis } from '../../services/commonServices';
 import TimingsPicker from '../../components/TimingsAutoComp';
 import { arr1, arr2, initialTestState } from '../../utils/labUtils'; // Adjust path as needed
 

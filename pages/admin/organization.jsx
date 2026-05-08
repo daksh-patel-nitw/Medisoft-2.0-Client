@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DomainIcon from '@mui/icons-material/Domain';
-import { apis } from '../../Services/commonServices';
+import { apis } from '../../services/commonServices';
 
 // ==========================================
 // COMPONENT: Reusable Card for Roles & Departments

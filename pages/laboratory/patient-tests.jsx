@@ -19,7 +19,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { toast } from 'react-toastify';
-import { apis } from '../../Services/commonServices';
+import { apis } from '../../services/commonServices';
 import { PatientAutocomplete } from '../../components/patientAutoComp';
 import usePatientStore from '../../store/usePatientStore'; // <-- Zustand Store
 

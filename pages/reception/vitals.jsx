@@ -25,7 +25,7 @@ import {
   CircularProgress
 } from '@mui/material/';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { apis } from '../../Services/commonServices';
+import { apis } from '../../services/commonServices';
 
 // ==========================================
 // UTILS (Co-located for simplicity)

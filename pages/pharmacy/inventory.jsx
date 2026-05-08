@@ -21,7 +21,7 @@ import MedicationIcon from "@mui/icons-material/Medication";
 import { Delete, Edit, Save, Cancel } from '@mui/icons-material';
 import { debounce } from '@mui/material/utils';
 import { toast } from 'react-toastify';
-import { apis } from '../../Services/commonServices';
+import { apis } from '../../services/commonServices';
 import useMedicineStore from '../../store/useMedicineStore'; // <-- Reusing our Zustand store!
 
 // ==========================================
