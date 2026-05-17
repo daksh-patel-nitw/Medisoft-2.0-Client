@@ -70,11 +70,11 @@ export default function LoginPage() {
       });
 
       if (response.status === 200) {
-        // const user = await response.json();
+         const user = await response.json();
         
-        // // Save to localStorage
-        // localStorage.setItem("id", user.id);
-        // localStorage.setItem("type", user.type);
+         // Save to localStorage
+         localStorage.setItem("id", user.id);
+         localStorage.setItem("type", user.type);
         if (user.dep) {
           localStorage.setItem('dep', user.role);
         }
