@@ -58,7 +58,6 @@ export default function RoleManagementPage() {
     fetchData();
   }, []);
 
-  // Handle Search Logic
   const handleSearch = (newValue, name, index) => {
     if (index === 0) {
       if (newValue) {
@@ -79,11 +78,10 @@ export default function RoleManagementPage() {
       } else {
         setFilter([]);
       }
-      setPage(0); // Reset to first page when filtering
+      setPage(0);
     }
   };
 
-  // Delete Employee
   const deleteT = async (id) => {
     const result = await apis.noTokenStatusDeleteRequest("member/role", id);
     if (result === 200) {
@@ -96,7 +94,6 @@ export default function RoleManagementPage() {
     }
   };
 
-  // Handle Form Submit
   const handleEmpSubmit = async (event) => {
     event.preventDefault();
     if (!empValues.eid || !empValues.name) {
@@ -117,7 +114,6 @@ export default function RoleManagementPage() {
     }
   };
 
-  // Helper for Autocomplete (Extracted for cleaner render method)
   const renderAutocomplete = (index, label, name) => (
     <Autocomplete
       options={name ? emp.map((option) => option[name]) : panel}

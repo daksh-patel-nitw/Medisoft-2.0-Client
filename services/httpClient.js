@@ -1,64 +1,84 @@
-// Services/httpClient.js
 import axios from 'axios';
 import { toast } from "react-toastify";
-import Cookies from 'js-cookie';
 
-// 1. Create the base client
-const client = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
-  headers: { "Content-Type": "application/json" }
-});
+const baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
-// 2. Request Interceptor: Automatically attach the token if we have one
-client.interceptors.request.use((config) => {
-  const token = Cookies.get('accessToken');
-  const mid = Cookies.get('mid');
-  const uname = Cookies.get('uname');
+// ==========================================
+// REUSABLE INTERCEPTOR LOGIC
+// ==========================================
+const applyInterceptors = (axiosInstance) => {
+  axiosInstance.interceptors.response.use(
+    (response) => {
+      // Show success toast if backend requests it
+      if (response.data?.show === true) {
+        toast.success(response.data.message);
+      }
+      return response.data;
+    },
+    (error) => {
+      if (error.response) {
+        // --- 401 UNAUTHORIZED HANDLER ---
+        if (error.response.status === 401 && window.location.pathname !== "/login") {
+          localStorage.clear(); // Wipe bad session data
+          toast.error(error.response.data?.message || "Session expired. Please log in again.");
+          
+          setTimeout(() => {
+            window.location.href = "/login";
+          }, 1000);
+          
+          return Promise.reject(error);
+        }
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-    if (mid) config.headers.mid = mid;
-    if (uname) config.headers.uname = uname;
-  }
-  return config;
-}, (error) => Promise.reject(error));
-
-// 3. Response Interceptor: Global Error & Toast Handling
-client.interceptors.response.use(
-  (response) => {
-    if (response.data?.show === true) {
-      toast.success(response.data.message);
-    }
-    return response;
-  },
-  (error) => {
-    if (error.response) {
-      // 401 Unauthorized: Kick them out!
-      if (error.response.status === 401 && window.location.pathname !== "/changepassword") {
-        Cookies.remove('accessToken');
-        Cookies.remove('mid');
-        Cookies.remove('uname');
-        
-        toast.error("Session expired. Please log in again.");
-        setTimeout(() => {
-          window.location.href = "/";
-        }, 1000);
-      } else {
-        // Normal API Errors
+        // --- STANDARD ERROR HANDLER ---
         const msg = error.response.data?.message || error.response.statusText;
         if (error.response.data?.warn === true) {
           toast.warn(msg);
         } else {
           toast.error(`Error: ${msg}`);
         }
+      } else if (error.request) {
+        console.error("Network error: ", error.message);
+        toast.error("Network error: Unable to connect to the server.");
+      } else {
+        console.error("Unexpected Error: ", error.message);
+        toast.error(`Unexpected error: ${error.message}`);
       }
-    } else if (error.request) {
-      toast.error("Network error: Unable to connect to the server.");
-    } else {
-      toast.error(`Unexpected error: ${error.message}`);
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
-  }
+  );
+
+  return axiosInstance;
+};
+
+// ==========================================
+// 1. STANDARD CLIENT (Requires Auth / Cookies)
+// ==========================================
+export const client = applyInterceptors(
+  axios.create({
+    baseURL,
+    withCredentials: true, // CRITICAL FOR HTTP-ONLY COOKIES
+    headers: { "Content-Type": "application/json" }
+  })
 );
 
-export default client;
+// ==========================================
+// 2. NO-TOKEN CLIENT (Public endpoints)
+// ==========================================
+export const clientNoToken = applyInterceptors(
+  axios.create({
+    baseURL,
+    withCredentials: false, 
+    headers: { "Content-Type": "application/json" }
+  })
+);
+
+// ==========================================
+// 3. FILE UPLOAD CLIENT (Requires Auth + Multipart)
+// ==========================================
+export const clientFileUpload = applyInterceptors(
+  axios.create({
+    baseURL,
+    withCredentials: true, // CRITICAL FOR HTTP-ONLY COOKIES
+    headers: { "Content-Type": "multipart/form-data" }
+  })
+);

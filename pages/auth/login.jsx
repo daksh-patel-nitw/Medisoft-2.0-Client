@@ -1,21 +1,23 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from 'next/router';
 import Grid from '@mui/material/Grid2';
-import { 
-  TextField, 
-  Button, 
-  Card, 
-  CardContent, 
-  Typography, 
-  Box, 
-  CircularProgress 
+import {
+  TextField,
+  Button,
+  Card,
+  CardContent,
+  Typography,
+  Box,
+  CircularProgress
 } from '@mui/material';
 import { toast } from 'react-toastify';
+import axios from "axios";
+import { apis } from "../../services/commonServices";
 
 export default function LoginPage() {
   const router = useRouter();
   const [formValues, setFormValues] = useState({ uname: '', password: '' });
-  
+
   // Prevents Next.js Hydration mismatch by waiting for the client to check localStorage
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
@@ -34,13 +36,13 @@ export default function LoginPage() {
   // Map roles to their specific Next.js page URLs
   const redirectBasedOnRole = (role) => {
     const routes = {
-      pharmacy: '/pharmacy/dispense', 
+      pharmacy: '/pharmacy/dispense',
       ipd: '/ipd/dashboard',
-      opd1: '/reception/register', 
-      opd2: '/reception/vitals',   
+      opd1: '/reception/register',
+      opd2: '/reception/vitals',
       doctor: '/doctor/dashboard',
-      lab: '/laboratory/patient-tests', 
-      admin: '/admin/roles',       
+      lab: '/laboratory/patient-tests',
+      admin: '/admin/roles',
       patient: '/patient/dashboard',
       bill: '/billing/dashboard'
     };
@@ -56,36 +58,17 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
     try {
-      // Use your API URL from environment variables, fallback to localhost
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-      
-      const response = await fetch(`${apiUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formValues)
-      });
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
-      if (response.status === 200) {
-         const user = await response.json();
-        
-         // Save to localStorage
-         localStorage.setItem("id", user.id);
-         localStorage.setItem("type", user.type);
-        if (user.dep) {
-          localStorage.setItem('dep', user.role);
-        }
+      const response = await apis.postRequest(`${apiUrl}/auth/login`, formValues);
 
+      if (response) {
+        const user = response.user;
+        localStorage.setItem('id', user.mid);
+        localStorage.setItem('uname', user.name);
         toast.success("Login successful!");
-        redirectBasedOnRole(user.type);
-
-      } else if (response.status === 401) {
-        toast.error('Invalid username or password');
-      } else {
-        toast.error('Authentication failed');
+        redirectBasedOnRole(user.role);
       }
     } catch (error) {
       console.error("Login Error:", error);
@@ -103,18 +86,18 @@ export default function LoginPage() {
   }
 
   return (
-    <Box 
-      display="flex" 
-      justifyContent="center" 
-      alignItems="center" 
-      minHeight="100vh" 
+    <Box
+      display="flex"
+      justifyContent="center"
+      alignItems="center"
+      minHeight="100vh"
       bgcolor="#f4f6f8" // Subtle background color to make the white card pop
     >
       <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '400px' }}>
         <Card sx={{ boxShadow: 4, borderRadius: 2, p: 2 }}>
           <CardContent>
             <Grid container spacing={3} justifyContent="center">
-              
+
               <Grid size={{ xs: 12 }} textAlign="center">
                 <Typography variant="h4" fontWeight="bold" color="primary" gutterBottom>
                   Hospital Portal
@@ -152,18 +135,18 @@ export default function LoginPage() {
               </Grid>
 
               <Grid size={{ xs: 12 }} mt={2}>
-                <Button 
-                  type="submit" 
-                  color="primary" 
-                  variant="contained" 
-                  fullWidth 
+                <Button
+                  type="submit"
+                  color="primary"
+                  variant="contained"
+                  fullWidth
                   size="large"
                   sx={{ fontWeight: 'bold', py: 1.5 }}
                 >
                   Login
                 </Button>
               </Grid>
-              
+
             </Grid>
           </CardContent>
         </Card>
