@@ -8,6 +8,7 @@ export const apis = {
   getRequest: (url, params = {}) => client.get(url, { params }),
   postRequest: (url, data) => client.post(url, data),
   putRequest: (url, data) => client.put(url, data),
+  patchRequest: (url, data) => client.patch(url, data),
   deleteRequest: (url) => client.delete(url),
 
   // --- No-Token Requests ---

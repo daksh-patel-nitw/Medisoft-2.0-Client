@@ -24,7 +24,7 @@ export default function LoginPage() {
   useEffect(() => {
     // Check if the user is already logged in when the page loads
     const id = localStorage.getItem("id");
-    const type = localStorage.getItem("type");
+    const type = localStorage.getItem("role");
 
     if (id && type) {
       redirectBasedOnRole(type);
@@ -60,16 +60,12 @@ export default function LoginPage() {
     e.preventDefault();
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-
-      const response = await apis.postRequest(`${apiUrl}/auth/login`, formValues);
-
-      if (response) {
-        const user = response.user;
-        localStorage.setItem('id', user.mid);
-        localStorage.setItem('uname', user.name);
-        toast.success("Login successful!");
-        redirectBasedOnRole(user.role);
-      }
+      const user = await apis.postRequest(`${apiUrl}/auth/login`, formValues);
+      console.log(user);
+      localStorage.setItem('id', user.mid);
+      localStorage.setItem('uname', user.name);
+      localStorage.setItem('role', user.role);
+      redirectBasedOnRole(user.role);
     } catch (error) {
       console.error("Login Error:", error);
       toast.error('Network Error: Unable to reach the server');
