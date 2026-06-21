@@ -1,15 +1,15 @@
 
 import DashboardLayout from '../components/DashboardLayout';
 import Router from 'next/router';
-import { ToastContainer, toast } from 'react-toastify';
-import { apis } from '../services/commonServices';
+import { ToastContainer } from 'react-toastify';
+import axios from 'axios';
 
 const AppComponent = ({ Component, pageProps, currentUser }) => {
   const layoutType = Component.layout || 'default';
 
   return (
     <>
-      <ToastContainer 
+      <ToastContainer
         position="top-right"
         autoClose={5000}
         hideProgressBar={false}
@@ -35,36 +35,67 @@ const AppComponent = ({ Component, pageProps, currentUser }) => {
 };
 
 AppComponent.getInitialProps = async (appContext) => {
-  // 1. Check if the page even requires authentication FIRST!
   const allowedRoles = appContext.Component.allowedRoles;
-
   let currentUser = null;
 
-  // 2. ONLY call the backend if the page is restricted (e.g., Dashboard pages)
   if (allowedRoles) {
     try {
-      const data = await apis.getRequest('/users/currentuser');
-      currentUser = data.user;
+      // 1. Determine if we are running on the Server or the Browser
+      const isServer = typeof window === 'undefined';
+      
+      // 2. If on the server, manually grab the cookie from the incoming request
+      const headers = isServer && appContext.ctx.req 
+        ? { cookie: appContext.ctx.req.headers.cookie || '' } 
+        : {};
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
+      // 3. Make the auth check with the forwarded cookies
+      const response = await axios.get(`${apiUrl}/users/currentuser`, {
+        headers,
+        withCredentials: true
+      });
+
+      currentUser = response?.data.data;
+      console.log(currentUser,"response", response.data);
+      if (currentUser) {
+        console.log('Auth Success:', currentUser.name,' User');
+      }
+
     } catch (err) {
-      console.log(err);
       console.log("Auth check failed. User not logged in.");
     }
 
-    // 3. Security Check: Do they exist and have the right role?
-    if (!currentUser || !allowedRoles.includes(currentUser.role)) {
+    // Fallback for client-side navigation right after login.
+    if (!currentUser && typeof window !== 'undefined') {
+      const storedRole = localStorage.getItem('role');
+      if (storedRole) {
+        currentUser = {
+          role: storedRole,
+          name: localStorage.getItem('uname')
+        };
+      }
+    }
+
+    // 4. Handle Unauthorized
+    const normalizedUserRole = (currentUser?.role)?.toLowerCase();
+    const normalizedAllowedRoles = (allowedRoles || []).map((role) => role);
+
+    if (!currentUser || !normalizedAllowedRoles.includes(normalizedUserRole)) {
       if (appContext.ctx.res) {
-        // Redirect to unauthorized (or login) on the server side
+        // Server-side redirect
         appContext.ctx.res.writeHead(302, { Location: '/unauthorized' });
         appContext.ctx.res.end();
       } else {
-        // Redirect on the client side
+        // Client-side redirect
         Router.push('/unauthorized');
       }
-      return { pageProps: {} }; // Stop executing
+      // Return early so the page doesn't try to load
+      return { pageProps: {}, currentUser: null }; 
     }
   }
 
-  // 4. Run the individual page's getInitialProps (if it has one)
+  // 5. Load individual page props
   let pageProps = {};
   if (appContext.Component.getInitialProps) {
     pageProps = await appContext.Component.getInitialProps(appContext.ctx);

@@ -10,20 +10,25 @@ const applyInterceptors = (axiosInstance) => {
   axiosInstance.interceptors.response.use(
     (response) => {
       // Show success toast if backend requests it
-      if (response.data?.show === true) {
+      const res=response.data?.show;
+      if (res !== false) {
         toast.success(response.data.message);
       }
-      return response.data;
+      if(res !== status)
+        return response.data.data;
+      else
+        return response.status;
     },
     (error) => {
       if (error.response) {
         // --- 401 UNAUTHORIZED HANDLER ---
-        if (error.response.status === 401 && window.location.pathname !== "/login") {
-          localStorage.clear(); // Wipe bad session data
+        if (error.response.status === 401 && window.location.pathname !== "/auth/login") {
+          localStorage.clear();
+          console.log("In error: ",error,"\n");
           toast.error(error.response.data?.message || "Session expired. Please log in again.");
           
           setTimeout(() => {
-            window.location.href = "/login";
+            window.location.href = "/auth/login";
           }, 1000);
           
           return Promise.reject(error);
@@ -31,7 +36,7 @@ const applyInterceptors = (axiosInstance) => {
 
         // --- STANDARD ERROR HANDLER ---
         const msg = error.response.data?.message || error.response.statusText;
-        if (error.response.data?.warn === true) {
+        if (error.response.data?.show === warn) {
           toast.warn(msg);
         } else {
           toast.error(`Error: ${msg}`);
@@ -56,7 +61,7 @@ const applyInterceptors = (axiosInstance) => {
 export const client = applyInterceptors(
   axios.create({
     baseURL,
-    withCredentials: true, // CRITICAL FOR HTTP-ONLY COOKIES
+    withCredentials: true,
     headers: { "Content-Type": "application/json" }
   })
 );
@@ -78,7 +83,7 @@ export const clientNoToken = applyInterceptors(
 export const clientFileUpload = applyInterceptors(
   axios.create({
     baseURL,
-    withCredentials: true, // CRITICAL FOR HTTP-ONLY COOKIES
+    withCredentials: true, 
     headers: { "Content-Type": "multipart/form-data" }
   })
 );
