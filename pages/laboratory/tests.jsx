@@ -45,19 +45,19 @@ export default function ManageTestsPage() {
   });
 
   // Fetch Data
-  const fetchTests = async () => {
-    try {
-      const data = await apis.noTokengetRequest('/lab');
-      setTests(data || []);
-    } catch (error) {
-      toast.error("Failed to fetch lab tests.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // const fetchTests = async () => {
+  //   try {
+  //     const data = await apis.noTokengetRequest('/lab');
+  //     setTests(data || []);
+  //   } catch (error) {
+  //     toast.error("Failed to fetch lab tests.");
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
 
   useEffect(() => {
-    fetchTests();
+    // fetchTests();
   }, []);
 
   // Handle Search
