@@ -165,17 +165,17 @@ export default function NewMedicinePage() {
     setFormValues(prev => ({ ...prev, t: newValue }));
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const data = await apis.noTokengetRequest('/pharmacy/types');
-        setCategory(data);
-      } catch (error) {
-        console.log(error);
-      }
-    };
-    fetchData();
-  }, []);
+  // useEffect(() => {
+  //   const fetchData = async () => {
+  //     try {
+  //       const data = await apis.noTokengetRequest('/pharmacy/types');
+  //       setCategory(data);
+  //     } catch (error) {
+  //       console.log(error);
+  //     }
+  //   };
+  //   fetchData();
+  // }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
