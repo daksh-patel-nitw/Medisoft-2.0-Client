@@ -41,26 +41,26 @@ const LabWorkflowTab = ({ mode }) => {
   const clearPatientGlobal = usePatientStore((state) => state.clearPatient);
 
   // Fetch tests when entering Step 1
-  useEffect(() => {
-    // if (step === 1 && patient) {
-    //   const fetchTests = async () => {
-    //     setIsLoading(true);
-    //     try {
-    //       const body = { 
-    //         pid: patient.pid,
-    //         status: mode === 'details' ? "B" : "T" // B = Booked, T = Taken
-    //       };
-    //       const data = await apis.noTokenPostRequest('/lab/prescription', body);
-    //       setTests(data || []);
-    //     } catch (error) {
-    //       toast.error("Failed to fetch patient tests.");
-    //     } finally {
-    //       setIsLoading(false);
-    //     }
-    //   };
-    //   fetchTests();
-    // }
-  }, [step, patient, mode]);
+  // useEffect(() => {
+  //   // if (step === 1 && patient) {
+  //   //   const fetchTests = async () => {
+  //   //     setIsLoading(true);
+  //   //     try {
+  //   //       const body = { 
+  //   //         pid: patient.pid,
+  //   //         status: mode === 'details' ? "B" : "T" // B = Booked, T = Taken
+  //   //       };
+  //   //       const data = await apis.noTokenPostRequest('/lab/prescription', body);
+  //   //       setTests(data || []);
+  //   //     } catch (error) {
+  //   //       toast.error("Failed to fetch patient tests.");
+  //   //     } finally {
+  //   //       setIsLoading(false);
+  //   //     }
+  //   //   };
+  //   //   fetchTests();
+  //   // }
+  // }, [step, patient, mode]);
 
   // Handle resetting back to search
   const handleGoBack = () => {
