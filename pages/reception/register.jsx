@@ -149,20 +149,20 @@ export default function RegistrationPage() {
   const [rolesDeps, setRolesDeps] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch Roles & Departments for Employee tab
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const data = await apis.noTokengetRequest('/member/rolesDeps/all');
-        setRolesDeps(data || []);
-      } catch (error) {
-        toast.error("Failed to load roles and departments");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+  // // Fetch Roles & Departments for Employee tab
+  // useEffect(() => {
+  //   const fetchData = async () => {
+  //     try {
+  //       const data = await apis.noTokengetRequest('/member/rolesDeps/all');
+  //       setRolesDeps(data || []);
+  //     } catch (error) {
+  //       toast.error("Failed to load roles and departments");
+  //     } finally {
+  //       setIsLoading(false);
+  //     }
+  //   };
+  //   fetchData();
+  // }, []);
 
   const handleFormSubmit = async (event, tracker, formValues) => {
     event.preventDefault();
