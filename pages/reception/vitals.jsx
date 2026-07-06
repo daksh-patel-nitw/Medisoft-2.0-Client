@@ -162,21 +162,21 @@ export default function VitalsPage() {
 
   // Note: Hardcoded 'cardiology' to match your original code.
   // In the future, this should probably come from the logged-in user's department!
-  const fetchData = async (dep = 'cardiology') => {
-    try {
-      const data = await apis.noTokengetRequest(`/appointment/getapp/${dep}`);
-      setPData(data || []);
-      setFilteredData(data || []);
-    } catch (error) {
-      toast.error("Failed to fetch appointments.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // const fetchData = async (dep = 'cardiology') => {
+  //   try {
+  //     const data = await apis.noTokengetRequest(`/appointment/getapp/${dep}`);
+  //     setPData(data || []);
+  //     setFilteredData(data || []);
+  //   } catch (error) {
+  //     toast.error("Failed to fetch appointments.");
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // useEffect(() => {
+  //   fetchData();
+  // }, []);
 
   // Handle Search/Filtering
   const handleSearch = (newValue, index) => {
