@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { toast } from 'react-toastify';
+import React, { useState, useEffect, useMemo } from 'react';
 import Grid from '@mui/material/Grid2';
 import {
   Card,
@@ -8,18 +7,19 @@ import {
   Button,
   Typography,
   Box,
-  CircularProgress,
   IconButton,
   Divider,
   Skeleton
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
-import DomainIcon from '@mui/icons-material/Domain';
 import EditIcon from '@mui/icons-material/Edit';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import { apis } from '../../services/commonServices';
 import useRefreshStore from '../../store/useRefreshStore';
+import { decodeToFlags, encodeFlags } from '../../utils/permissions.util';
+import RolesCard from '../../components/RolesCard';
+import RoleFormDialog from '../../components/RoleFormDialog';
 
 // ==========================================
 // THE SKELETON LOADER COMPONENT
@@ -42,25 +42,20 @@ const ManageListSkeleton = () => (
 );
 
 // ==========================================
-// COMPONENT: Reusable Card for Roles & Departments
+// COMPONENT: Departments list (plain string CRUD, GlobalMetadata-backed)
 // ==========================================
-const ManageListCard = ({ title, type, items = [], onAdd, onDelete, onEdit }) => {
+const DepartmentsCard = ({ items = [], canAdd, canEdit, canDelete, onAdd, onDelete, onEdit }) => {
   const [addVal, setAddVal] = useState('');
   const [searchVal, setSearchVal] = useState('');
-
-  // Inline Edit State
   const [editingItem, setEditingItem] = useState(null);
   const [editVal, setEditVal] = useState('');
 
-  // Frontend Search Filtering
-  const filteredItems = items.filter((item) =>
-    item.toLowerCase().includes(searchVal.toLowerCase())
-  );
+  const filteredItems = items.filter((item) => item.toLowerCase().includes(searchVal.toLowerCase()));
 
   const handleAddClick = async () => {
     if (!addVal.trim()) return;
-    const success = await onAdd(type, addVal.trim());
-    if (success) setAddVal(''); // Clear input only if API succeeds
+    const success = await onAdd(addVal.trim());
+    if (success) setAddVal('');
   };
 
   const handleStartEdit = (item) => {
@@ -78,47 +73,38 @@ const ManageListCard = ({ title, type, items = [], onAdd, onDelete, onEdit }) =>
       handleCancelEdit();
       return;
     }
-    const success = await onEdit(type, oldVal, editVal.trim());
-    if (success) {
-      setEditingItem(null);
-      setEditVal('');
-    }
+    const success = await onEdit(oldVal, editVal.trim());
+    if (success) handleCancelEdit();
   };
 
   return (
     <Card sx={{ height: '70vh', display: 'flex', flexDirection: 'column', boxShadow: 3 }}>
       <CardContent sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <Typography variant="h6" fontWeight="bold" gutterBottom>
-          Manage {title}
+          Manage Departments
         </Typography>
 
-        {/* ADD ROW */}
-        <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
-          <Grid size={{ xs: 8 }}>
-            <TextField
-              label={`Add New ${title}`}
-              fullWidth
-              variant="outlined"
-              size="small"
-              value={addVal}
-              onChange={(e) => setAddVal(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddClick()}
-            />
+        {canAdd && (
+          <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
+            <Grid size={{ xs: 8 }}>
+              <TextField
+                label="Add New Department"
+                fullWidth
+                variant="outlined"
+                size="small"
+                value={addVal}
+                onChange={(e) => setAddVal(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddClick()}
+              />
+            </Grid>
+            <Grid size={{ xs: 4 }}>
+              <Button variant="contained" color="primary" fullWidth onClick={handleAddClick} disabled={!addVal.trim()}>
+                Add
+              </Button>
+            </Grid>
           </Grid>
-          <Grid size={{ xs: 4 }}>
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              onClick={handleAddClick}
-              disabled={!addVal.trim()}
-            >
-              Add
-            </Button>
-          </Grid>
-        </Grid>
+        )}
 
-        {/* SEARCH ROW */}
         <Grid container spacing={2} sx={{ mb: 2 }}>
           <Grid size={{ xs: 6 }}>
             <TextField
@@ -134,11 +120,9 @@ const ManageListCard = ({ title, type, items = [], onAdd, onDelete, onEdit }) =>
 
         <Divider sx={{ mb: 2 }} />
 
-        {/* SCROLLABLE LIST */}
-        <Box sx={{ height: '40vh', overflowY: 'auto', pr: 1 }}>
+        <Box sx={{ flexGrow: 1, overflowY: 'auto', pr: 1 }}>
           {filteredItems.map((item, idx) => {
             const isEditing = editingItem === item;
-
             return (
               <Box
                 key={idx}
@@ -178,12 +162,16 @@ const ManageListCard = ({ title, type, items = [], onAdd, onDelete, onEdit }) =>
                       {item}
                     </Typography>
                     <Box sx={{ display: 'flex', flexWrap: 'nowrap' }}>
-                      <IconButton color="primary" onClick={() => handleStartEdit(item)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton color="secondary" onClick={() => onDelete(type, item)}>
-                        <DeleteIcon />
-                      </IconButton>
+                      {canEdit && (
+                        <IconButton color="primary" onClick={() => handleStartEdit(item)}>
+                          <EditIcon />
+                        </IconButton>
+                      )}
+                      {canDelete && (
+                        <IconButton color="secondary" onClick={() => onDelete(item)}>
+                          <DeleteIcon />
+                        </IconButton>
+                      )}
                     </Box>
                   </>
                 )}
@@ -197,7 +185,6 @@ const ManageListCard = ({ title, type, items = [], onAdd, onDelete, onEdit }) =>
             </Typography>
           )}
         </Box>
-
       </CardContent>
     </Card>
   );
@@ -206,23 +193,29 @@ const ManageListCard = ({ title, type, items = [], onAdd, onDelete, onEdit }) =>
 // ==========================================
 // MAIN PAGE COMPONENT
 // ==========================================
-export default function OrganizationPage() {
-  // Matched to the new backend schema
-  const [dataLists, setDataLists] = useState({ deps: [], roles: [] });
+export default function OrganizationPage({ currentUser }) {
+  const [deps, setDeps] = useState([]);
+  const [roles, setRoles] = useState([]); // [{ role, permissions: string[] (encoded) }]
   const [isLoading, setIsLoading] = useState(true);
+  const [dialogState, setDialogState] = useState({ open: false, mode: 'create', role: null, flags: [] });
+
   const refreshTick = useRefreshStore((state) => state.refreshTick);
   const finishRefresh = useRefreshStore((state) => state.finishRefresh);
 
+  // Decoded once per currentUser change, reused for every show/hide check on
+  // this page - never re-parsed per button.
+  const flags = useMemo(() => decodeToFlags(currentUser?.permissions), [currentUser?.permissions]);
+
   const fetchData = async () => {
     try {
-      setIsLoading(true)
-      // PROMISE.ALL runs both the API call and the timer simultaneously.
-      // It won't resolve until BOTH are completely finished.
-      const [data] = await Promise.all([
-        apis.getRequest('/admin/rolesDeps'),
-        new Promise(resolve => setTimeout(resolve, 1000)) // Enforces 1-second minimum
+      setIsLoading(true);
+      const [depData, roleData] = await Promise.all([
+        apis.getRequest('/admin/departments'),
+        apis.getRequest('/admin/roles'),
+        new Promise((resolve) => setTimeout(resolve, 1000))
       ]);
-      setDataLists({ deps: data?.deps || [], roles: data?.roles || [] });
+      setDeps(depData || []);
+      setRoles(roleData || []);
     } catch (error) {
       console.error(error);
     } finally {
@@ -235,97 +228,124 @@ export default function OrganizationPage() {
     fetchData();
   }, [refreshTick]);
 
-  // Map API type requirement to our local state keys
-  const getListKey = (type) => type === 'role' ? 'roles' : 'deps';
-
-  // --- API HANDLERS ---
-  const handleAdd = async (type, value) => {
+  // --- Department handlers ---
+  const handleDepAdd = async (value) => {
     try {
-      await apis.postRequest('/admin/rolesDeps', { key: type, value });
-      const listKey = getListKey(type);
-
-      setDataLists(prev => ({
-        ...prev,
-        [listKey]: [...prev[listKey], value]
-      }));
-      return true; // Signals the card to clear the input
-    } catch (error) {
-      return false;
-    }
-  };
-
-  const handleEdit = async (type, oldValue, newValue) => {
-    try {
-      await apis.putRequest('/admin/rolesDeps', {
-        key: type,
-        value: oldValue,
-        updatedValue: newValue
-      });
-      const listKey = getListKey(type);
-
-      setDataLists(prev => ({
-        ...prev,
-        [listKey]: prev[listKey].map(item => item === oldValue ? newValue : item)
-      }));
+      await apis.postRequest('/admin/departments', { value });
+      setDeps((prev) => [...prev, value]);
       return true;
     } catch (error) {
       return false;
     }
   };
 
-  const handleDelete = async (type, value) => {
-    if (!window.confirm(`Are you sure you want to delete ${value} ${type}?`)) return;
-
+  const handleDepEdit = async (oldValue, newValue) => {
     try {
-      await apis.deleteRequest(`/admin/rolesDeps/${type}/${encodeURIComponent(value)}`);
-      const listKey = getListKey(type);
-
-      setDataLists(prev => ({
-        ...prev,
-        [listKey]: prev[listKey].filter(item => item !== value)
-      }));
+      await apis.putRequest('/admin/departments', { value: oldValue, updatedValue: newValue });
+      setDeps((prev) => prev.map((d) => (d === oldValue ? newValue : d)));
+      return true;
     } catch (error) {
+      return false;
     }
   };
 
+  const handleDepDelete = async (value) => {
+    if (!window.confirm(`Are you sure you want to delete the "${value}" department?`)) return;
+    try {
+      await apis.deleteRequest(`/admin/departments/${encodeURIComponent(value)}`);
+      setDeps((prev) => prev.filter((d) => d !== value));
+    } catch (error) {}
+  };
+
+  // --- Role handlers ---
+  const openCreateDialog = () => setDialogState({ open: true, mode: 'create', role: null, flags: [] });
+
+  const openEditDialog = (roleEntry) =>
+    setDialogState({
+      open: true,
+      mode: 'edit',
+      role: roleEntry.role,
+      flags: Array.from(decodeToFlags(roleEntry.permissions))
+    });
+
+  const closeDialog = () => setDialogState((s) => ({ ...s, open: false }));
+
+  const handleRoleSubmit = async ({ role, flags: pickedFlags }) => {
+    const permissions = encodeFlags(pickedFlags);
+    try {
+      if (dialogState.mode === 'edit') {
+        await apis.putRequest('/admin/roles', { role, permissions });
+        setRoles((prev) => prev.map((r) => (r.role === role ? { role, permissions } : r)));
+      } else {
+        await apis.postRequest('/admin/roles', { role, permissions });
+        setRoles((prev) => [...prev, { role, permissions }]);
+      }
+      closeDialog();
+    } catch (error) {
+      // Backend-rejected cases (built-in role, duplicate name) already surface
+      // via the global toast interceptor - leave the dialog open so the user
+      // can fix the input instead of losing it.
+    }
+  };
+
+  const handleRoleDelete = async (role) => {
+    if (!window.confirm(`Are you sure you want to delete the role "${role}"?`)) return;
+    try {
+      await apis.deleteRequest(`/admin/roles/${encodeURIComponent(role)}`);
+      setRoles((prev) => prev.filter((r) => r.role !== role));
+    } catch (error) {
+      // Built-in role / role still assigned to an account: backend returns
+      // 400 with a message, already toasted globally.
+    }
+  };
 
   return (
     <Box>
-    
-      {isLoading ?
+      {isLoading ? (
         <Grid container spacing={4} alignItems="stretch">
           <Grid size={{ xs: 12, md: 6 }}><ManageListSkeleton /></Grid>
           <Grid size={{ xs: 12, md: 6 }}><ManageListSkeleton /></Grid>
         </Grid>
-        :
+      ) : (
         <Grid container spacing={4} alignItems="stretch">
+          {flags.has('viewRoles') && (
+            <Grid size={{ xs: 12, md: 6 }}>
+              <RolesCard
+                roles={roles}
+                canCreate={flags.has('createRole')}
+                canUpdate={flags.has('updateRole')}
+                canDelete={flags.has('deleteRole')}
+                onCreate={openCreateDialog}
+                onEdit={openEditDialog}
+                onDelete={handleRoleDelete}
+              />
+            </Grid>
+          )}
 
-          {/* ROLES CARD */}
-          <Grid size={{ xs: 12, md: 6 }}>
-            <ManageListCard
-              title="Roles"
-              type="role" // Exact string the backend expects
-              items={dataLists.roles}
-              onAdd={handleAdd}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-            />
-          </Grid>
-
-          {/* DEPARTMENTS CARD */}
-          <Grid size={{ xs: 12, md: 6 }}>
-            <ManageListCard
-              title="Departments"
-              type="department" // Exact string the backend expects
-              items={dataLists.deps}
-              onAdd={handleAdd}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-            />
-          </Grid>
-
+          {flags.has('viewDepartments') && (
+            <Grid size={{ xs: 12, md: 6 }}>
+              <DepartmentsCard
+                items={deps}
+                canAdd={flags.has('createDepartment')}
+                canEdit={flags.has('updateDepartment')}
+                canDelete={flags.has('deleteDepartment')}
+                onAdd={handleDepAdd}
+                onEdit={handleDepEdit}
+                onDelete={handleDepDelete}
+              />
+            </Grid>
+          )}
         </Grid>
-      }
+      )}
+
+      <RoleFormDialog
+        open={dialogState.open}
+        mode={dialogState.mode}
+        initialRole={dialogState.role}
+        initialFlags={dialogState.flags}
+        onClose={closeDialog}
+        onSubmit={handleRoleSubmit}
+      />
     </Box>
   );
 }

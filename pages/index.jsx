@@ -1,41 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { 
-  AppBar, 
-  Toolbar, 
-  Typography, 
-  Button, 
-  Container, 
-  Grid, 
-  Card, 
-  CardContent, 
-  CardActions,
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  Container,
+  Grid,
+  Card,
+  CardContent,
   Box,
   Skeleton,
   Stack
 } from '@mui/material';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
+import { apis } from '../services/commonServices';
 
 // Note: We use hideHeader = true because we are building a custom landing page navbar!
 const LandingPage = () => {
   const [loading, setLoading] = useState(true);
   const [doctors, setDoctors] = useState([]);
 
-  // Client-side fetch so we can show Skeletons!
+  // Public, unauthenticated endpoint (no-token client - no cookies sent).
   useEffect(() => {
-    // Simulating an API call to fetch doctors/data
     const fetchData = async () => {
       setLoading(true);
-      // Replace this setTimeout with your actual Axios call:
-      // const res = await apis.get('/api/doctors');
-      setTimeout(() => {
-        setDoctors([
-          { id: 1, name: "Dr. Sarah Jenkins", spec: "Cardiology" },
-          { id: 2, name: "Dr. Mark Sloan", spec: "Neurology" },
-          { id: 3, name: "Dr. Emily Chen", spec: "Pediatrics" },
-        ]);
+      try {
+        const data = await apis.noTokengetRequest('/public/doctors');
+        setDoctors(data || []);
+      } catch (error) {
+        setDoctors([]);
+      } finally {
         setLoading(false);
-      }, 2000); // 2 second fake delay to see skeletons
+      }
     };
 
     fetchData();
@@ -104,24 +101,29 @@ const LandingPage = () => {
                   </Grid>
                 ))
               : /* Show real data when done */
-                doctors.map((doc) => (
-                  <Grid item xs={12} sm={6} md={4} key={doc.id}>
+                doctors.map((doc, index) => (
+                  <Grid item xs={12} sm={6} md={4} key={`${doc.name}-${index}`}>
                     <Card elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                       <CardContent sx={{ flexGrow: 1 }}>
                         <Typography variant="h6" fontWeight="bold">
                           {doc.name}
                         </Typography>
                         <Typography color="text.secondary">
-                          {doc.spec}
+                          {doc.department}
                         </Typography>
                       </CardContent>
-                      <CardActions>
-                        <Button size="small" color="primary">View Profile</Button>
-                      </CardActions>
                     </Card>
                   </Grid>
                 ))
             }
+
+            {!loading && doctors.length === 0 && (
+              <Grid item xs={12}>
+                <Typography color="text.secondary" align="center">
+                  No doctors listed yet.
+                </Typography>
+              </Grid>
+            )}
           </Grid>
         </Box>
 

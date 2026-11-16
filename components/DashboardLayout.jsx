@@ -1,8 +1,9 @@
 import * as React from 'react';
-import { styled, createTheme, ThemeProvider, useTheme } from '@mui/material/styles';
+import { styled, ThemeProvider, useTheme } from '@mui/material/styles';
 import { useRouter } from 'next/router';
 import useDrawerStore from '../store/useDrawerStore';
 import { sidebarMenus } from '../utils/sidebarConfig';
+import { createAppTheme, getThemeKeyForRole } from '../utils/themes.util';
 import {
   Box, Drawer as MuiDrawer, AppBar as MuiAppBar, Toolbar, List, CssBaseline,
   Typography, Divider, IconButton, ListItem, ListItemButton, ListItemIcon,
@@ -18,22 +19,6 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import * as Icons from '@mui/icons-material';
 import useRefreshStore from '../store/useRefreshStore';
 import { apis } from '../services/commonServices';
-
-// ==========================================
-// 1. DEFINE YOUR ROLE-BASED THEME COLORS
-// ==========================================
-const roleThemes = {
-  admin: { primary: '#1976d2', secondary: '#dc004e' },        // Classic Blue / Pink
-  laboratorist: { primary: '#009688', secondary: '#ff9800' }, // Teal / Orange
-  nurse: { primary: '#e91e63', secondary: '#00bcd4' },        // Pink / Cyan
-  pharmacist: { primary: '#4caf50', secondary: '#ffc107' },   // Green / Amber
-  reception1: { primary: '#3f51b5', secondary: '#f44336' },   // Indigo / Red
-  reception2: { primary: '#673ab7', secondary: '#00e5ff' },   // Deep Purple / Cyan
-  biller: { primary: '#795548', secondary: '#8bc34a' },       // Brown / Light Green
-  doctor: { primary: '#00bcd4', secondary: '#ff5722' },       // Cyan / Deep Orange
-  patient: { primary: '#607d8b', secondary: '#ffeb3b' },      // Blue Grey / Yellow
-  default: { primary: '#1976d2', secondary: '#dc004e' }       // Fallback
-};
 
 const drawerWidth = 240;
 
@@ -118,16 +103,8 @@ export default function DashboardLayout({ children, currentUser }) {
   // ==========================================
   // 2. DYNAMICALLY GENERATE THE THEME
   // ==========================================
-  const roleKey = currentUser?.role?.toLowerCase() || 'default';
-  const currentColors = roleThemes[roleKey] || roleThemes.default;
-
-  const dynamicTheme = React.useMemo(() => createTheme({
-    palette: {
-      primary: { main: currentColors.primary },
-      secondary: { main: currentColors.secondary },
-      background: { default: '#f4f6f8' }
-    },
-  }), [currentColors]);
+  const themeKey = getThemeKeyForRole(currentUser?.role);
+  const dynamicTheme = React.useMemo(() => createAppTheme(themeKey), [themeKey]);
 
   const handleDrawerToggle = () => {
     isSmallScreen ? setMobileOpen(!mobileOpen) : toggleDrawer();
