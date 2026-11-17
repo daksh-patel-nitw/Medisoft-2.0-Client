@@ -50,10 +50,16 @@ const LandingPage = () => {
           </Typography>
           
           {/* Desktop Navigation Links */}
+          {/* color="primary" (not "inherit") so the anchor's default visited-link
+              purple can't bleed through into the button's inherited text color. */}
           <Stack direction="row" spacing={2} sx={{ display: { xs: 'none', md: 'flex' }, mr: 4 }}>
-            <Button color="inherit" href="#doctors">Our Doctors</Button>
-            <Button color="inherit" href="#pharmacy">Pharmacy</Button>
-            <Button color="inherit" href="#lab">Lab & Tests</Button>
+            <Button color="primary" href="#doctors">Our Doctors</Button>
+            <Link href="/medicines" passHref>
+              <Button color="primary">Pharmacy</Button>
+            </Link>
+            <Link href="/lab-tests" passHref>
+              <Button color="primary">Lab Tests</Button>
+            </Link>
           </Stack>
 
           <Link href="/auth/login" passHref>
@@ -138,7 +144,9 @@ const LandingPage = () => {
                 <Typography color="text.secondary" paragraph>
                   Order your prescribed medicines online and get them delivered to your ward or home instantly. We stock all major lifesavers and generic medicines.
                 </Typography>
-                <Button variant="outlined">Browse Medicines</Button>
+                <Link href="/medicines" passHref>
+                  <Button variant="outlined">Browse Medicines</Button>
+                </Link>
               </CardContent>
             </Card>
           </Grid>
@@ -152,7 +160,9 @@ const LandingPage = () => {
                 <Typography color="text.secondary" paragraph>
                   State-of-the-art pathology labs. Book blood tests, MRIs, and X-Rays online and get your reports directly on your patient dashboard.
                 </Typography>
-                <Button variant="outlined" color="secondary">View Test Catalog</Button>
+                <Link href="/lab-tests" passHref>
+                  <Button variant="outlined" color="secondary">View Test Catalog</Button>
+                </Link>
               </CardContent>
             </Card>
           </Grid>

@@ -13,10 +13,12 @@ import {
 import { toast } from 'react-toastify';
 import axios from "axios";
 import { apis } from "../../services/commonServices";
+import MedicalProgressBar from "../../components/MedicalProgressBar";
 
 export default function LoginPage() {
   const router = useRouter();
   const [formValues, setFormValues] = useState({ uname: '', password: '' });
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Prevents Next.js Hydration mismatch by waiting for the client to check localStorage
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -58,6 +60,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsLoggingIn(true);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       const user = await apis.postRequest(`${apiUrl}/auth/login`, formValues);
@@ -69,6 +72,7 @@ export default function LoginPage() {
     } catch (error) {
       console.error("Login Error:", error);
       toast.error('Network Error: Unable to reach the server');
+      setIsLoggingIn(false);
     }
   };
 
@@ -82,13 +86,15 @@ export default function LoginPage() {
   }
 
   return (
-    <Box
-      display="flex"
-      justifyContent="center"
-      alignItems="center"
-      minHeight="100vh"
-      bgcolor="#f4f6f8" // Subtle background color to make the white card pop
-    >
+    <>
+      <MedicalProgressBar open={isLoggingIn} label="Signing you in..." />
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="100vh"
+        bgcolor="#f4f6f8" // Subtle background color to make the white card pop
+      >
       <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '400px' }}>
         <Card sx={{ boxShadow: 4, borderRadius: 2, p: 2 }}>
           <CardContent>
@@ -137,6 +143,7 @@ export default function LoginPage() {
                   variant="contained"
                   fullWidth
                   size="large"
+                  disabled={isLoggingIn}
                   sx={{ fontWeight: 'bold', py: 1.5 }}
                 >
                   Login
@@ -147,7 +154,8 @@ export default function LoginPage() {
           </CardContent>
         </Card>
       </form>
-    </Box>
+      </Box>
+    </>
   );
 }
 

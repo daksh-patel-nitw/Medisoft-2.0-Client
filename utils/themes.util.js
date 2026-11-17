@@ -61,6 +61,15 @@ export const THEME_PALETTES = {
     secondary: { main: '#EF6C00', light: '#FF9E40', dark: '#B53D00' },
     background: { default: '#F5F6F7', paper: '#FFFFFF' },
   },
+  // Deliberately a different red than SEMANTIC_PALETTE.error (deeper ruby vs
+  // bright alert red) so an error chip never blends into this theme's own
+  // primary color - e.g. for an emergency/urgent-care screen.
+  rubyRed: {
+    label: 'Ruby Red',
+    primary: { main: '#C62828', light: '#E57373', dark: '#8E0000' },
+    secondary: { main: '#455A64', light: '#718792', dark: '#1C313A' },
+    background: { default: '#FBF4F4', paper: '#FFFFFF' },
+  },
 };
 
 /**

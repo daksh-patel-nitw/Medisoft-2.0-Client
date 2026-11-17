@@ -66,17 +66,6 @@ AppComponent.getInitialProps = async (appContext) => {
       console.log("Auth check failed. User not logged in.");
     }
 
-    // Fallback for client-side navigation right after login.
-    if (!currentUser && typeof window !== 'undefined') {
-      const storedRole = localStorage.getItem('role');
-      if (storedRole) {
-        currentUser = {
-          role: storedRole,
-          name: localStorage.getItem('uname')
-        };
-      }
-    }
-
     // 4. Handle Unauthorized
     const normalizedUserRole = (currentUser?.role)?.toLowerCase();
     const normalizedAllowedRoles = (allowedRoles || []).map((role) => role);
