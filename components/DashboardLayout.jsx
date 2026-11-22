@@ -158,6 +158,9 @@ export default function DashboardLayout({ children, currentUser }) {
     router.replace('/auth/login');
   };
 
+  // The phone's slide-out menu always shows labels; only the desktop drawer has an icon-only (closed) state.
+  const showLabels = isSmallScreen || isOpen;
+
   const drawerContent = (
     <>
       <DrawerHeader>
@@ -173,21 +176,21 @@ export default function DashboardLayout({ children, currentUser }) {
           return (
             <React.Fragment key={group.label}>
               <ListItem disablePadding sx={{ display: 'block' }}>
-                <Tooltip title={isOpen ? '' : group.label} placement="right">
+                <Tooltip title={showLabels ? '' : group.label} placement="right">
                   <ListItemButton
-                    sx={{ minHeight: 48, justifyContent: isOpen ? 'initial' : 'center', px: 2.5 }}
+                    sx={{ minHeight: 48, justifyContent: showLabels ? 'initial' : 'center', px: 2.5 }}
                     onClick={() => handleGroupClick(group)}
                   >
-                    <ListItemIcon sx={{ minWidth: 0, mr: isOpen ? 3 : 'auto', justifyContent: 'center' }}>
+                    <ListItemIcon sx={{ minWidth: 0, mr: showLabels ? 3 : 'auto', justifyContent: 'center' }}>
                       <GroupIcon color="primary" />
                     </ListItemIcon>
-                    <ListItemText primary={group.label} sx={{ opacity: isOpen ? 1 : 0 }} />
-                    {isOpen && (expanded ? <ExpandLess /> : <ExpandMore />)}
+                    <ListItemText primary={group.label} sx={{ opacity: showLabels ? 1 : 0 }} />
+                    {showLabels && (expanded ? <ExpandLess /> : <ExpandMore />)}
                   </ListItemButton>
                 </Tooltip>
               </ListItem>
 
-              <Collapse in={isOpen && expanded} timeout="auto" unmountOnExit>
+              <Collapse in={showLabels && expanded} timeout="auto" unmountOnExit>
                 <List component="div" disablePadding>
                   {group.children.map((item) => {
                     const ItemIcon = Icons[item.icon] || Icons.HelpOutline;

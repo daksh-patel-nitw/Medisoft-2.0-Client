@@ -70,6 +70,7 @@ export default function LoginPage() {
 
               <Grid size={{ xs: 12 }}>
                 <TextField
+                  slotProps={{ inputLabel: { shrink: true } }} // always floated: phone autofill fills the box without React seeing it, which left the label on top of the text
                   fullWidth
                   name="uname"
                   id="uname"
@@ -83,6 +84,7 @@ export default function LoginPage() {
 
               <Grid size={{ xs: 12 }}>
                 <TextField
+                  slotProps={{ inputLabel: { shrink: true } }} // always floated: phone autofill fills the box without React seeing it, which left the label on top of the text
                   fullWidth
                   name="password"
                   id="password"
