@@ -1,359 +1,162 @@
 import React, { useState, useEffect } from 'react';
-import Grid from '@mui/material/Grid2';
-import {
-  Card,
-  CardContent,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  IconButton,
-  TextField,
-  TablePagination,
-  Autocomplete,
-  Typography,
-  Box,
-  Button,
-  Chip,
-  CircularProgress
-} from '@mui/material';
+import { Card, CardContent, Box, IconButton, Tooltip, Typography } from '@mui/material';
 import { Delete, Edit } from '@mui/icons-material';
-import { toast } from 'react-toastify';
-
-// Make sure these paths match your project structure!
 import { apis } from '../../services/commonServices';
-import TimingsPicker from '../../components/TimingsAutoComp';
+import useRefreshStore from '../../store/useRefreshStore';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import DataTable from '../../components/DataTable';
+import SearchField from '../../components/SearchField';
+import LabTestEditDialog from '../../components/LabTestEditDialog';
+import { PAGE_ACCESS } from '../../utils/pageAccess';
+
+const ROWS_PER_PAGE_OPTIONS = [10, 20];
+
+const COLUMNS = [
+  { key: 'name', label: 'Test name', minWidth: 140 },
+  { key: 'price', label: 'Price (₹)', align: 'right', render: (t) => `₹${Number(t.price).toFixed(2)}` },
+  { key: 'pat_details', label: 'Required details' },
+  { key: 'normal', label: 'Normal range' },
+  {
+    key: 'timing',
+    label: 'Timings',
+    minWidth: 200,
+    render: (t) => (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+        {(t.timing ?? []).map((slot, i) => (
+          <Typography key={slot} variant="body2">
+            <strong>{i + 1})</strong> {slot}
+          </Typography>
+        ))}
+      </Box>
+    ),
+  },
+];
 
 export default function ManageTestsPage() {
-  const [tests, setTests] = useState([]);
-  const [searchValue, setSearchValue] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Pagination State
+  const [tests, setTests] = useState(null); // null = still loading
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE_OPTIONS[0]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [editing, setEditing] = useState(null);
+  const [toDelete, setToDelete] = useState(null);
 
-  // Inline Edit State
-  const [editRowId, setEditRowId] = useState(null);
-  const [editFormData, setEditFormData] = useState({
-    price: '',
-    pat_details: '',
-    normal: '',
-    timing: []
-  });
+  const refreshTick = useRefreshStore((state) => state.refreshTick);
+  const finishRefresh = useRefreshStore((state) => state.finishRefresh);
 
-  // Fetch Data
-  // const fetchTests = async () => {
-  //   try {
-  //     const data = await apis.noTokengetRequest('/lab');
-  //     setTests(data || []);
-  //   } catch (error) {
-  //     toast.error("Failed to fetch lab tests.");
-  //   } finally {
-  //     setIsLoading(false);
-  //   }
-  // };
-
+  // GET /laboratory returns every active test (there is no server paging), so
+  // searching and paging are done here.
   useEffect(() => {
-    // fetchTests();
-  }, []);
-
-  // Handle Search
-  const handleSearch = (event, newValue) => {
-    setSearchValue(newValue || '');
-    setPage(0); // Reset to first page on search
-  };
-
-  // Pagination Handlers
-  const handleChangePage = (event, newPage) => setPage(newPage);
-  const handleChangeRowsPerPage = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
-  // Delete Action
-  const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this test?")) {
+    let cancelled = false;
+    const load = async () => {
       try {
-        const status = await apis.noTokenStatusDeleteRequest('/lab', id);
-        if (status === 200) {
-          setTests(tests.filter((m) => m._id !== id));
-          toast.success("Test deleted successfully.");
-        }
+        const data = await apis.getRequest('/laboratory');
+        if (!cancelled) setTests(data || []);
       } catch (error) {
-        toast.error("Error deleting test.");
+        if (!cancelled) setTests([]);
+      } finally {
+        finishRefresh();
       }
-    }
-  };
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshTick, reloadKey]);
 
-  // ==========================================
-  // INLINE EDITING LOGIC
-  // ==========================================
-  const handleEditClick = (test) => {
-    setEditRowId(test._id);
-    setEditFormData({
-      price: test.price || '',
-      pat_details: test.pat_details || '',
-      normal: test.normal || '',
-      timing: test.timing || []
-    });
-  };
+  const needle = search.trim().toLowerCase();
+  const rows = (tests ?? []).filter((t) => !needle || t.name?.toLowerCase().includes(needle));
+  const lastPage = Math.max(0, Math.ceil(rows.length / rowsPerPage) - 1);
+  const safePage = Math.min(page, lastPage); // deleting the last row of a page steps back a page
 
-  const handleCancelClick = () => {
-    setEditRowId(null);
-  };
-
-  const handleFormChange = (e) => {
-    const { name, value } = e.target;
-    setEditFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  // Timings Logic for Inline Editor
-  const handleAddTiming = (newTiming) => {
-    if (!editFormData.timing.includes(newTiming)) {
-      setEditFormData((prev) => ({ ...prev, timing: [...prev.timing, newTiming] }));
-    } else {
-      toast.info("Timing already added");
-    }
-  };
-
-  const handleDeleteTiming = (timingToRemove) => {
-    setEditFormData((prev) => ({
-      ...prev,
-      timing: prev.timing.filter((t) => t !== timingToRemove)
-    }));
-  };
-
-  const handleSaveClick = async (testId) => {
+  const saveEdit = async (payload) => {
     try {
-      // Assuming your backend handles standard object updates for the whole row.
-      // If your backend specifically requires `{ column, value, id }`, you will need 
-      // to adjust this payload to match your backend expectations!
-      const payload = {
-        _id: testId,
-        price: editFormData.price,
-        pat_details: editFormData.pat_details,
-        normal: editFormData.normal,
-        timing: editFormData.timing
-      };
-
-      // Replace '/lab' with your actual update endpoint (e.g., '/lab/update' or just PUT '/lab')
-      const status = await apis.noTokenStatusPutRequest('/lab', payload);
-      
-      if (status === 200) {
-        toast.success("Test updated successfully!");
-        // Optimistic UI Update
-        setTests(tests.map(t => t._id === testId ? { ...t, ...payload } : t));
-        setEditRowId(null);
-      } else {
-        toast.error("Failed to update test.");
-      }
+      await apis.putRequest('/laboratory', payload);
+      setEditing(null);
+      setReloadKey((k) => k + 1);
+      return true;
     } catch (error) {
-      toast.error("Server error while saving.");
+      return false; // toasted by the http client; the dialog stays open with the values
     }
   };
 
-  // Filter and Slice Data for Table
-  const filteredTests = tests.filter((m) => 
-    m.name?.toLowerCase().includes(searchValue.toLowerCase())
-  );
-  
-  const displayedTests = filteredTests.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
-
-  const columns = ["Test Name", "Price (₹)", "Required Details", "Normal Range", "Timings", "Actions"];
-
-  if (isLoading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const confirmDelete = async () => {
+    const { _id } = toDelete;
+    setToDelete(null);
+    try {
+      await apis.deleteRequest(`/laboratory/${encodeURIComponent(_id)}`);
+      setReloadKey((k) => k + 1);
+    } catch (error) {
+      // Already toasted by the http client.
+    }
+  };
 
   return (
-    <Box>
-      <Typography variant="h4" fontWeight="bold" gutterBottom>
-        Manage Laboratory Tests
-      </Typography>
+    <Box sx={{ height: '100%' }}>
+      <Card sx={{ boxShadow: 3, height: '100%', minHeight: 420, display: 'flex', flexDirection: 'column' }}>
+        <CardContent sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pb: '16px !important' }}>
+          {/* pt: room for the outlined field's floating label */}
+          <Box sx={{ pt: 1, mb: 2, maxWidth: 400 }}>
+            <SearchField
+              label="Search by test name"
+              value={search}
+              onChange={(text) => {
+                setSearch(text);
+                setPage(0);
+              }}
+            />
+          </Box>
 
-      <Card sx={{ mt: 3, boxShadow: 3, minHeight: '75vh', position: 'relative' }}>
-        <CardContent sx={{ pb: 10 }}>
-          
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Autocomplete
-                freeSolo
-                options={tests.map((option) => option.name)}
-                onChange={handleSearch}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Search by Test Name"
-                    variant="outlined"
-                    size="small"
-                    onChange={(e) => handleSearch(null, e.target.value)} // Fallback for manual typing
-                  />
-                )}
-              />
-            </Grid>
-          </Grid>
-
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  {columns.map((col, index) => (
-                    <TableCell key={index} sx={{ backgroundColor: '#2c3e50', color: 'white', fontWeight: 'bold' }}>
-                      {col}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {displayedTests.map((m) => {
-                  const isEditing = editRowId === m._id;
-
-                  return (
-                    <TableRow key={m._id} hover>
-                      
-                      {/* Name (Non-editable) */}
-                      <TableCell sx={{ fontWeight: '500', minWidth: '150px' }}>
-                        {m.name}
-                      </TableCell>
-
-                      {/* Price */}
-                      <TableCell>
-                        {isEditing ? (
-                          <TextField
-                            size="small"
-                            name="price"
-                            type="number"
-                            value={editFormData.price}
-                            onChange={handleFormChange}
-                            sx={{ width: '100px' }}
-                          />
-                        ) : (
-                          `₹${m.price}`
-                        )}
-                      </TableCell>
-
-                      {/* Required Details */}
-                      <TableCell>
-                        {isEditing ? (
-                          <TextField
-                            size="small"
-                            name="pat_details"
-                            value={editFormData.pat_details}
-                            onChange={handleFormChange}
-                            fullWidth
-                          />
-                        ) : (
-                          m.pat_details
-                        )}
-                      </TableCell>
-
-                      {/* Normal Range */}
-                      <TableCell>
-                        {isEditing ? (
-                          <TextField
-                            size="small"
-                            name="normal"
-                            value={editFormData.normal}
-                            onChange={handleFormChange}
-                            fullWidth
-                          />
-                        ) : (
-                          m.normal
-                        )}
-                      </TableCell>
-
-                      {/* Timings */}
-                      <TableCell sx={{ minWidth: isEditing ? '350px' : '200px' }}>
-                        {isEditing ? (
-                          <Box sx={{ p: 1, border: '1px dashed #ccc', borderRadius: 1 }}>
-                            <TimingsPicker handleAdd={handleAddTiming} />
-                            <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                              {editFormData.timing.map((t, idx) => (
-                                <Chip 
-                                  key={idx} 
-                                  label={t} 
-                                  size="small" 
-                                  onDelete={() => handleDeleteTiming(t)} 
-                                  color="primary" 
-                                  variant="outlined" 
-                                />
-                              ))}
-                            </Box>
-                          </Box>
-                        ) : (
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                            {m.timing?.map((t, index) => (
-                              <Typography key={index} variant="body2">
-                                <strong>{index + 1})</strong> {t}
-                              </Typography>
-                            ))}
-                          </Box>
-                        )}
-                      </TableCell>
-
-                      {/* Actions */}
-                      <TableCell>
-                        {isEditing ? (
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                            <Button variant="contained" color="success" size="small" onClick={() => handleSaveClick(m._id)}>
-                              Save
-                            </Button>
-                            <Button variant="outlined" color="inherit" size="small" onClick={handleCancelClick}>
-                              Cancel
-                            </Button>
-                          </Box>
-                        ) : (
-                          <Box sx={{ display: 'flex', gap: 1 }}>
-                            <IconButton onClick={() => handleEditClick(m)} color="primary" size="small">
-                              <Edit fontSize="small" />
-                            </IconButton>
-                            <IconButton onClick={() => handleDelete(m._id)} color="error" size="small">
-                              <Delete fontSize="small" />
-                            </IconButton>
-                          </Box>
-                        )}
-                      </TableCell>
-
-                    </TableRow>
-                  );
-                })}
-
-                {displayedTests.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                      <Typography color="text.secondary">No laboratory tests found.</Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </CardContent>
-
-        {/* Bottom Fixed Pagination */}
-        <Box sx={{ position: "absolute", bottom: 0, left: 0, right: 0, borderTop: '1px solid #e0e0e0', bgcolor: 'background.paper' }}>
-          <TablePagination
-            rowsPerPageOptions={[5, 10, 25]}
-            component="div"
-            count={filteredTests.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
+          <DataTable
+            columns={COLUMNS}
+            rows={rows.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage)}
+            getRowKey={(t) => t._id}
+            loading={tests === null}
+            emptyMessage="No laboratory tests found."
+            actionsLabel="Actions"
+            fillHeight
+            renderActions={(t) => (
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Tooltip title="Edit">
+                  <IconButton color="primary" size="small" onClick={() => setEditing(t)}>
+                    <Edit fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Delete">
+                  <IconButton color="error" size="small" onClick={() => setToDelete(t)}>
+                    <Delete fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            )}
+            pagination={{
+              count: rows.length,
+              page: safePage,
+              rowsPerPage,
+              rowsPerPageOptions: ROWS_PER_PAGE_OPTIONS,
+              onPageChange: (e, newPage) => setPage(newPage),
+              onRowsPerPageChange: (e) => {
+                setRowsPerPage(parseInt(e.target.value, 10));
+                setPage(0);
+              },
+            }}
           />
-        </Box>
+        </CardContent>
       </Card>
+
+      {/* Mounted only while editing so the form always starts from that test's values. */}
+      {editing && <LabTestEditDialog key={editing._id} test={editing} onSave={saveEdit} onCancel={() => setEditing(null)} />}
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        message={`Delete the test "${toDelete?.name ?? ''}"?`}
+        onConfirm={confirmDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </Box>
   );
 }
 
 // NEXT.JS SECURITY GATE
 ManageTestsPage.layout = 'dashboard';
-ManageTestsPage.allowedRoles = ['admin', 'laboratory'];
+ManageTestsPage.requiredPermissions = PAGE_ACCESS.labTests;

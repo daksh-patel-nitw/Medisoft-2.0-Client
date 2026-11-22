@@ -1,164 +1,60 @@
 import React, { useState } from 'react';
-import { 
-  Card, 
-  CardContent, 
-  TextField, 
-  Button, 
-  Typography, 
-  Chip, 
-  Box 
-} from '@mui/material';
-import Grid from '@mui/material/Grid2';
-import { toast } from 'react-toastify';
-
-// Make sure these utilities and components exist in your project!
+import { Card, CardContent, Box, Typography } from '@mui/material';
 import { apis } from '../../services/commonServices';
-import TimingsPicker from '../../components/TimingsAutoComp';
-import { arr1, arr2, initialTestState } from '../../utils/labUtils'; // Adjust path as needed
+import LabTestForm, { EMPTY_LAB_TEST, validateLabTest, toLabPayload } from '../../components/LabTestForm';
+import CardActionButton from '../../components/CardActionButton';
+import { PAGE_ACCESS } from '../../utils/pageAccess';
 
 export default function AddLabTestPage() {
-  const [formValues, setFormValues] = useState(initialTestState);
-
-  const handleInputChange = (event) => {
-    const { name, value } = event.target;
-    setFormValues(prev => ({ ...prev, [name]: value }));
-  };
-
-  const addTiming = (newTiming) => {
-    if (!formValues.timing.includes(newTiming)) {
-      setFormValues(prev => ({ ...prev, timing: [...prev.timing, newTiming] }));
-    } else {
-      toast.info("Timing already added");
-    }
-  };
-
-  const deleteTiming = (timingToRemove) => {
-    setFormValues(prev => ({ 
-      ...prev, 
-      timing: prev.timing.filter(time => time !== timingToRemove) 
-    }));
-  };
+  const [values, setValues] = useState(EMPTY_LAB_TEST);
+  const [errors, setErrors] = useState({});
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    
-    if (!formValues.timing || formValues.timing.length === 0) {
-      toast.warn("Please add at least one timing slot.");
-      return;
-    }
+    const found = validateLabTest(values);
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
 
     try {
-      const status = await apis.noTokenStatusPostRequest('/lab', formValues);
-      if (status === 200) {
-        toast.success("New Lab Test added successfully!");
-        setFormValues(initialTestState); // Reset form
-      } else {
-        toast.error("Failed to add test. Please try again.");
-      }
+      // The server answers with its own success message (shown as a toast).
+      await apis.postRequest('/laboratory', toLabPayload(values));
+      setValues(EMPTY_LAB_TEST);
     } catch (error) {
-      toast.error("Server error. Could not add test.");
+      // Already toasted by the http client; keep the form so nothing is lost.
     }
   };
 
   return (
-    <Box sx={{ maxWidth: 900, mx: 'auto', mt: 2 }}>
-      <Typography variant="h4" fontWeight="bold" gutterBottom>
-        Laboratory Setup
-      </Typography>
+    // The original card, centered, a little wider than before (800px instead of
+    // ~600px) so the From/To time pickers aren't squeezed. No top margin, so it
+    // sits right under the breadcrumb.
+    <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', height: '100%' }}>
+      <form
+        onSubmit={handleSubmit}
+        autoComplete="off"
+        noValidate
+        style={{ width: '100%', maxWidth: 800, height: '100%', display: 'flex' }}
+      >
+        <Card sx={{ width: '100%', boxShadow: 3, display: 'flex', flexDirection: 'column', minHeight: 520 }}>
+          <CardContent sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto' }}>
+            <Typography variant="h5" fontWeight="bold" gutterBottom sx={{ mb: 3 }}>
+              Add New Test Profile
+            </Typography>
 
-      <form onSubmit={handleSubmit} autoComplete="off">
-        <Grid container spacing={2} justifyContent="center">
-          <Grid size={{ xs: 12, md: 10, lg: 8 }}>
-            <Card sx={{ position: "relative", minHeight: "75vh", boxShadow: 3 }}>
-              <CardContent sx={{ pb: 10 }}>
-                <Typography variant="h5" fontWeight="bold" gutterBottom sx={{ mb: 3 }}>
-                  Add New Test Profile
-                </Typography>
+            <LabTestForm
+              values={values}
+              onChange={(next) => {
+                setValues(next);
+                setErrors({});
+              }}
+              errors={errors}
+            />
+          </CardContent>
 
-                <Grid container spacing={3}>
-                  {arr1.map((fieldName, index) => (
-                    <React.Fragment key={fieldName}>
-                      
-                      {/* Standard Fields */}
-                      {index !== 4 && (
-                        <Grid size={{ xs: 12 }}>
-                          <TextField
-                            fullWidth
-                            name={fieldName}
-                            id={fieldName}
-                            label={arr2[index]}
-                            variant="outlined"
-                            value={formValues[fieldName] || ''}
-                            type={index === 1 ? "number" : "text"} // Assuming index 1 is Price/Cost
-                            onChange={handleInputChange}
-                            required
-                            size="small"
-                          />
-                        </Grid>
-                      )}
-
-                      {/* Timings Field (Assuming index 4 is timings based on your code) */}
-                      {index === 4 && (
-                        <Grid container size={{ xs: 12 }} spacing={2} alignItems="stretch">
-                          <Grid size={{ xs: 12, md: 5 }}>
-                            <TimingsPicker handleAdd={addTiming} />
-                          </Grid>
-                          
-                          <Grid 
-                            container 
-                            size={{ xs: 12, md: 7 }} 
-                            sx={{ 
-                              border: '1px solid #ccc', 
-                              borderRadius: 1, 
-                              p: 2,
-                              minHeight: '56px',
-                              alignItems: 'flex-start',
-                              alignContent: 'flex-start'
-                            }} 
-                            spacing={1}
-                          >
-                            {formValues.timing?.length > 0 ? (
-                              formValues.timing.map((time, idx) => (
-                                <Grid key={idx}>
-                                  <Chip 
-                                    label={time} 
-                                    color="primary"
-                                    variant="outlined" 
-                                    onDelete={() => deleteTiming(time)} 
-                                  />
-                                </Grid>
-                              ))
-                            ) : (
-                              <Typography variant="body2" color="text.secondary" sx={{ width: '100%', textAlign: 'center', mt: 1 }}>
-                                No Timings Added
-                              </Typography>
-                            )}
-                          </Grid>
-                        </Grid>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </Grid>
-              </CardContent>
-
-              {/* Bottom Fixed Action Button */}
-              <Grid container sx={{ position: "absolute", bottom: 0, left: 0, right: 0, p: 2, bgcolor: 'background.paper', borderTop: '1px solid #e0e0e0' }}>
-                <Grid size={{ xs: 12 }}>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    fullWidth
-                    sx={{ height: "6vh", fontWeight: "bold", fontSize: "1.1rem" }}
-                  >
-                    Save New Test
-                  </Button>
-                </Grid>
-              </Grid>
-
-            </Card>
-          </Grid>
-        </Grid>
+          <Box sx={{ px: 2, pb: 2, display: 'flex', flexDirection: 'column' }}>
+            <CardActionButton type="submit">Save New Test</CardActionButton>
+          </Box>
+        </Card>
       </form>
     </Box>
   );
@@ -166,4 +62,4 @@ export default function AddLabTestPage() {
 
 // NEXT.JS SECURITY GATE
 AddLabTestPage.layout = 'dashboard';
-AddLabTestPage.allowedRoles = ['admin', 'laboratory'];
+AddLabTestPage.requiredPermissions = PAGE_ACCESS.labNewTest;

@@ -39,7 +39,7 @@ const LandingPage = () => {
   }, []);
 
   return (
-    <Box sx={{ flexGrow: 1, backgroundColor: '#f5f5f5', minHeight: '100vh', pb: 8 }}>
+    <Box sx={{ flexGrow: 1, backgroundColor: '#f5f5f5', pb: 8 }}>
       
       {/* NAVBAR */}
       <AppBar position="sticky" sx={{ backgroundColor: 'white', color: 'primary.main' }}>

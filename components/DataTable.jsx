@@ -25,7 +25,9 @@ import {
  * @param {(row) => React.ReactNode} [renderActions] - adds a trailing actions column when given
  * @param {string} [actionsLabel]
  * @param {boolean} [stickyHeader]
- * @param {string|number} [maxHeight]
+ * @param {string|number} [maxHeight] - cap for the scrolling body (ignored when `fillHeight`)
+ * @param {boolean} [fillHeight] - stretch to fill the parent (which must be a flex column with a fixed
+ *   height): the rows scroll in the space left and the pagination stays pinned at the bottom
  * @param {{page, rowsPerPage, count, onPageChange, onRowsPerPageChange, rowsPerPageOptions?}} [pagination]
  *   Fully controlled, like MUI's own TablePagination - omit entirely for an unpaginated table.
  */
@@ -39,6 +41,7 @@ export default function DataTable({
   actionsLabel = 'Actions',
   stickyHeader = true,
   maxHeight = '60vh',
+  fillHeight = false,
   pagination,
 }) {
   const columnCount = columns.length + (renderActions ? 1 : 0);
@@ -51,8 +54,11 @@ export default function DataTable({
   };
 
   return (
-    <Paper variant="outlined" sx={{ width: '100%' }}>
-      <TableContainer sx={{ maxHeight }}>
+    <Paper
+      variant="outlined"
+      sx={{ width: '100%', ...(fillHeight && { flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }) }}
+    >
+      <TableContainer sx={fillHeight ? { flexGrow: 1, minHeight: 0 } : { maxHeight }}>
         <Table size="small" stickyHeader={stickyHeader}>
           <TableHead>
             <TableRow>
@@ -111,6 +117,7 @@ export default function DataTable({
           onPageChange={pagination.onPageChange}
           onRowsPerPageChange={pagination.onRowsPerPageChange}
           rowsPerPageOptions={pagination.rowsPerPageOptions ?? [5, 10, 25]}
+          sx={fillHeight ? { flexShrink: 0, borderTop: 1, borderColor: 'divider' } : undefined}
         />
       )}
     </Paper>

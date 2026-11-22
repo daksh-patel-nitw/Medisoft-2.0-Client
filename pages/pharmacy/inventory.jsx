@@ -1,423 +1,253 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Card,
   CardContent,
-  Grid2 as Grid, // Use standard Grid import alias for clarity
-  Typography,
   Box,
   TextField,
-  Autocomplete,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Chip,
   IconButton,
-  CircularProgress,
-  Button
+  Tooltip
 } from '@mui/material';
-import MedicationIcon from "@mui/icons-material/Medication";
-import { Delete, Edit, Save, Cancel } from '@mui/icons-material';
-import { debounce } from '@mui/material/utils';
-import { toast } from 'react-toastify';
+import { Delete, Edit, Add } from '@mui/icons-material';
 import { apis } from '../../services/commonServices';
-import useMedicineStore from '../../store/useMedicineStore'; // <-- Reusing our Zustand store!
+import useRefreshStore from '../../store/useRefreshStore';
+import { decodeToFlags } from '../../utils/permissions.util';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import DataTable from '../../components/DataTable';
+import SearchField from '../../components/SearchField';
+import MedicineEditDialog from '../../components/MedicineEditDialog';
+import AddStockDialog from '../../components/AddStockDialog';
+import { PAGE_ACCESS } from '../../utils/pageAccess';
 
-// ==========================================
-// COMPONENT 1: The Medicine Autocomplete
-// ==========================================
-const InventoryAutocomplete = ({ setHasMore, setFilteredString, setFilteredMedicines }) => {
-  const [value, setValue] = useState(null);
-  const [options, setOptions] = useState([]);
+const ROWS_PER_PAGE_OPTIONS = [10, 20];
+// The API only searches from 3 characters, and only letters/digits/spaces.
+const MIN_SEARCH_LENGTH = 3;
+const SEARCH_PATTERN = /^[\p{L}\p{M}\p{N}\s]*$/u;
+const SEARCH_DEBOUNCE_MS = 400;
 
-  // Zustand
-  const inputValue = useMedicineStore((state) => state.medicineInputValue);
-  const setMedicineInputValue = useMedicineStore((state) => state.setMedicineInputValue);
+const COLUMNS = [
+  { key: 'name', label: 'Medicine name' },
+  {
+    key: 't',
+    label: 'Category',
+    render: (m) => <Chip size="small" variant="outlined" color="primary" label={m.t?.name ?? '-'} />,
+  },
+  { key: 'ps', label: 'Pack size', align: 'right' },
+  { key: 'ps_u', label: 'Packs in stock', align: 'right' },
+  { key: 'ps_c', label: 'Loose pcs', align: 'right', render: (m) => m.ps_c ?? 0 },
+  {
+    key: 'total',
+    label: 'Total units',
+    align: 'right',
+    render: (m) => Number(m.ps_u) * Number(m.ps) + Number(m.ps_c ?? 0),
+  },
+  { key: 'price', label: 'Price (₹/unit)', align: 'right', render: (m) => `₹${Number(m.price).toFixed(2)}` },
+];
 
-  // Debounced Search
-  const fetchMedicines = useMemo(
-    () =>
-      debounce(async (query, active) => {
-        if (!query) return;
-        try {
-          const response = await apis.noTokengetRequest(`/pharmacy/search?query=${query}`);
-          if (active) {
-            setOptions(response || []);
-            if (response.length > 0) {
-              setFilteredMedicines(response);
-            }
-          }
-        } catch (error) {
-          // THE FIX: Add the toast and gracefully set empty options
-          console.error('Error fetching medicines:', error);
-          toast.error("Network Error: Could not search medicines.");
-          setOptions([]); 
-        }
-      }, 500),
-    [setFilteredMedicines]
-  );
+export default function InventoryPage({ currentUser }) {
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState(''); // debounced, validated search actually sent
+  const [page, setPage] = useState(0); // 0-based for the table; the API is 1-based
+  const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE_OPTIONS[0]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [result, setResult] = useState({ key: null, items: [], total: 0 });
+  const [categories, setCategories] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [stocking, setStocking] = useState(null); // medicine getting stock added
+  const [toDelete, setToDelete] = useState(null);
 
+  const refreshTick = useRefreshStore((state) => state.refreshTick);
+  const finishRefresh = useRefreshStore((state) => state.finishRefresh);
+
+  // Decoded once per currentUser change, reused for every show/hide check.
+  const flags = useMemo(() => decodeToFlags(currentUser?.permissions), [currentUser?.permissions]);
+  const canManage = flags.has('manageMedicines');
+  // Editing needs the category list, which is its own permission - without it
+  // there is nothing to choose from, so the edit button stays hidden.
+  const canEdit = canManage && flags.has('viewMedicineCategories');
+
+  const searchError = !SEARCH_PATTERN.test(search);
+  const searchTooShort = search.trim().length > 0 && search.trim().length < MIN_SEARCH_LENGTH;
+
+  // Debounce typing; invalid or too-short text is not sent (the list stays as it was).
   useEffect(() => {
-    let active = true;
+    if (searchError) return undefined;
+    const trimmed = search.trim();
+    if (trimmed.length > 0 && trimmed.length < MIN_SEARCH_LENGTH) return undefined;
+    const timer = setTimeout(() => {
+      setQuery(trimmed);
+      setPage(0);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search, searchError]);
 
-    if (inputValue === '') {
-      setValue(null);
-      setOptions(value ? [value] : []);
-      setHasMore(true);
-      return;
-    }
-
-    if (inputValue.length >= 3) {
-      setFilteredString(inputValue);
-      fetchMedicines(inputValue, active);
-    } else {
-      setFilteredString('');
-    }
-
-    return () => {
-      active = false;
+  // Categories for the edit dialog.
+  useEffect(() => {
+    if (!canEdit) return undefined;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const data = await apis.getRequest('/pharmacy/types');
+        if (!cancelled) setCategories(data || []);
+      } catch (error) {
+        // Already toasted by the http client.
+      }
     };
-  }, [inputValue, fetchMedicines, setFilteredString, setHasMore, value]);
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [canEdit]);
+
+  // `loading` is derived from which request the data belongs to, so nothing
+  // sets state synchronously inside the effect.
+  const requestKey = `${page}|${rowsPerPage}|${query}|${reloadKey}|${refreshTick}`;
+  const loading = result.key !== requestKey;
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const params = { page: page + 1, limit: rowsPerPage };
+        if (query) params.query = query;
+        const data = await apis.getRequest('/pharmacy', params);
+        if (!cancelled) setResult({ key: requestKey, items: data?.medicines ?? [], total: data?.total ?? 0 });
+      } catch (error) {
+        if (!cancelled) setResult({ key: requestKey, items: [], total: 0 });
+      } finally {
+        finishRefresh();
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [requestKey]);
+
+  const saveEdit = async (payload) => {
+    try {
+      await apis.putRequest('/pharmacy', payload);
+      setEditing(null);
+      setReloadKey((k) => k + 1);
+      return true;
+    } catch (error) {
+      return false; // toasted by the http client; the dialog stays open with the values
+    }
+  };
+
+  // PUT /pharmacy/increment ADDS the amounts to the current stock.
+  const saveStock = async (payload) => {
+    try {
+      await apis.putRequest('/pharmacy/increment', payload);
+      setStocking(null);
+      setReloadKey((k) => k + 1);
+      return true;
+    } catch (error) {
+      return false; // toasted by the http client; the dialog stays open with the values
+    }
+  };
+
+  const confirmDelete = async () => {
+    const { _id } = toDelete;
+    setToDelete(null);
+    try {
+      await apis.deleteRequest(`/pharmacy/${encodeURIComponent(_id)}`);
+      // Deleting the last row of a page steps back one page instead of showing an empty one.
+      if (result.items.length === 1 && page > 0) setPage(page - 1);
+      else setReloadKey((k) => k + 1);
+    } catch (error) {
+      // Already toasted by the http client.
+    }
+  };
 
   return (
-    <Autocomplete
-      getOptionLabel={(option) => option.name || ''}
-      options={options}
-      autoComplete
-      includeInputInList
-      filterSelectedOptions
-      value={value}
-      noOptionsText="No medicines found"
-      onChange={(event, newValue) => {
-        setHasMore(false);
-        setFilteredMedicines(newValue ? [newValue] : []);
-        setValue(newValue);
-      }}
-      onInputChange={(event, newInputValue) => {
-        // Only alphanumeric and spaces
-        if (/^[a-zA-Z0-9 ]*$/.test(newInputValue)) {
-          setMedicineInputValue(newInputValue);
-        }
-      }}
-      renderInput={(params) => (
-        <TextField {...params} label="Search Medicines (Enter 3 letters)" fullWidth size="small" />
-      )}
-      renderOption={(props, option) => (
-        <li {...props} key={option._id}>
-          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-            <MedicationIcon sx={{ color: 'text.secondary', mr: 1 }} />
-            <Box>
-              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                {option.name}
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Per {option.t} - ₹{option.price?.toFixed(2)}
-              </Typography>
-            </Box>
+    <Box sx={{ height: '100%' }}>
+      <Card sx={{ boxShadow: 3, height: '100%', minHeight: 420, display: 'flex', flexDirection: 'column' }}>
+        <CardContent sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pb: '16px !important' }}>
+          {/* pt: room for the outlined field's floating label */}
+          <Box sx={{ pt: 1, mb: 2, maxWidth: 400 }}>
+            <SearchField
+              label="Search medicines"
+              value={search}
+              onChange={setSearch}
+              error={searchError}
+              helperText={
+                searchError ? 'Letters and numbers only' : searchTooShort ? `Type at least ${MIN_SEARCH_LENGTH} characters` : undefined
+              }
+            />
           </Box>
-        </li>
-      )}
-    />
-  );
-};
 
-// ==========================================
-// COMPONENT 2: The Inline-Edit Table
-// ==========================================
-const MedicinesTable = ({ hasMore, lastElementRef, medicines, handleDelete, setMedicines }) => {
-  const columns = ["Medicine Name", "Type", "Package Size", "Pack Stock", "Loose Pcs", "Price (₹)", "Actions"];
-  
-  // Track which row is currently being edited
-  const [editRowId, setEditRowId] = useState(null);
-  
-  // Temporary state for the row being edited
-  const [editFormData, setEditFormData] = useState({ ps: '', ps_u: '', price: '' });
-
-  const handleEditClick = (medicine) => {
-    setEditRowId(medicine._id);
-    // Initialize the form with current values
-    setEditFormData({
-      ps: medicine.ps,
-      ps_u: medicine.ps_u,
-      price: medicine.price
-    });
-  };
-
-  const handleCancelClick = () => {
-    setEditRowId(null);
-  };
-
-  const handleFormChange = (e) => {
-    const { name, value } = e.target;
-    setEditFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSaveClick = async (medicine) => {
-    // Basic validation
-    if (!editFormData.ps || !editFormData.ps_u || !editFormData.price) {
-      toast.error("Values cannot be empty");
-      return;
-    }
-
-    try {
-      // Create payload. Assuming your backend accepts these fields for update
-      const payload = {
-        _id: medicine._id,
-        ps: Number(editFormData.ps),
-        ps_u: Number(editFormData.ps_u), // If they are ADDING stock, you might need to handle math here before sending
-        price: Number(editFormData.price)
-      };
-
-      // Call your API (Replace with your actual PUT/POST route)
-      // await apis.noTokenStatusPutRequest('/pharmacy/update', payload); 
-      
-      // Optimistic UI Update (Update the local array so we don't have to refetch)
-      setMedicines(prevMedicines => 
-        prevMedicines.map(m => 
-          m._id === medicine._id 
-            ? { ...m, ...payload } 
-            : m
-        )
-      );
-
-      toast.success("Inventory updated successfully!");
-      setEditRowId(null); // Exit edit mode
-    } catch (error) {
-      toast.error("Failed to update inventory.");
-      console.error(error);
-    }
-  };
-
-  return (
-    <TableContainer sx={{ maxHeight: '60vh' }}>
-      <Table stickyHeader size="small">
-        <TableHead>
-          <TableRow>
-            {columns.map((element, index) => (
-              <TableCell key={index} sx={{ backgroundColor: '#2c3e50', color: 'white', fontWeight: 'bold' }}>
-                {element}
-              </TableCell>
-            ))}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {medicines.map((m) => {
-            const isEditing = editRowId === m._id;
-
-            return (
-              <TableRow key={m._id} hover>
-                {/* Non-editable columns */}
-                <TableCell sx={{ fontWeight: '500' }}>{m.name}</TableCell>
-                <TableCell>{m.t}</TableCell>
-
-                {/* Editable columns */}
-                <TableCell>
-                  {isEditing ? (
-                    <TextField 
-                      size="small" 
-                      name="ps" 
-                      type="number" 
-                      value={editFormData.ps} 
-                      onChange={handleFormChange} 
-                      sx={{ width: 80 }}
-                    />
-                  ) : m.ps}
-                </TableCell>
-                <TableCell>
-                  {isEditing ? (
-                    <TextField 
-                      size="small" 
-                      name="ps_u" 
-                      type="number" 
-                      value={editFormData.ps_u} 
-                      onChange={handleFormChange} 
-                      sx={{ width: 80 }}
-                      helperText={isEditing ? "Total Packs" : ""}
-                    />
-                  ) : m.ps_u}
-                </TableCell>
-                
-                {/* Calculated Column (Loose pieces) */}
-                <TableCell>{isEditing ? "—" : (m.ps_c + (m.ps_u * m.ps))}</TableCell>
-
-                <TableCell>
-                  {isEditing ? (
-                    <TextField 
-                      size="small" 
-                      name="price" 
-                      type="number" 
-                      value={editFormData.price} 
-                      onChange={handleFormChange} 
-                      sx={{ width: 80 }}
-                    />
-                  ) : `₹${m.price}`}
-                </TableCell>
-
-                {/* Actions Column */}
-                <TableCell>
-                  {isEditing ? (
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Button variant="contained" color="success" size="small" onClick={() => handleSaveClick(m)}>
-                        Save
-                      </Button>
-                      <Button variant="outlined" color="inherit" size="small" onClick={handleCancelClick}>
-                        Cancel
-                      </Button>
+          <DataTable
+            columns={COLUMNS}
+            rows={result.items}
+            getRowKey={(m) => m._id}
+            loading={loading}
+            emptyMessage="No medicines found in inventory."
+            actionsLabel="Actions"
+            fillHeight
+            renderActions={
+              canManage
+                ? (m) => (
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <Tooltip title="Add stock">
+                        <IconButton color="success" size="small" onClick={() => setStocking(m)}>
+                          <Add fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      {canEdit && (
+                        <Tooltip title="Edit">
+                          <IconButton color="primary" size="small" onClick={() => setEditing(m)}>
+                            <Edit fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      <Tooltip title="Delete">
+                        <IconButton color="error" size="small" onClick={() => setToDelete(m)}>
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
-                  ) : (
-                    <Box sx={{ display: 'flex' }}>
-                      <IconButton onClick={() => handleEditClick(m)} color="primary" size="small">
-                        <Edit fontSize="small" />
-                      </IconButton>
-                      <IconButton onClick={() => handleDelete(m._id)} color="error" size="small">
-                        <Delete fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  )}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-
-          {hasMore && (
-            <TableRow ref={lastElementRef}>
-              <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
-                <CircularProgress size={24} />
-              </TableCell>
-            </TableRow>
-          )}
-
-          {!hasMore && medicines.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                <Typography color="text.secondary">No medicines found in inventory.</Typography>
-              </TableCell>
-            </TableRow>
-          )}
-
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
-};
-
-// ==========================================
-// MAIN PAGE COMPONENT
-// ==========================================
-export default function InventoryPage() {
-  const [medicines, setMedicines] = useState([]);
-  const [filteredString, setFilteredString] = useState('');
-  const [filteredMedicines, setFilteredMedicines] = useState([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(false);
-
-  const observer = useRef();
-
-  // Fetch paginated medicines
-  const fetchData = useMemo(() => debounce(async (pageNumber, searchString) => {
-    if (loading || (!hasMore && pageNumber !== 1)) return;
-
-    setLoading(true);
-    try {
-      const response = await apis.noTokengetRequest(`/pharmacy?page=${pageNumber}&limit=15&query=${searchString}`);
-      
-      if (response && response.medicines) {
-        if (pageNumber === 1) {
-          setMedicines(response.medicines);
-        } else {
-          setMedicines((prev) => [...prev, ...response.medicines]);
-        }
-        setHasMore(pageNumber < response.totalPages);
-      }
-    } catch (error) {
-      // THE FIX: Show the toast, and tell the infinite scroller to stop trying
-      console.error("Error fetching medicines:", error);
-      toast.error("Network Error: Failed to load inventory.");
-      setHasMore(false); // Stops the table from infinitely spinning if the server is down
-    } finally {
-      setLoading(false);
-    }
-  }, 500), [loading, hasMore]);
-  
-  // Handle Initial Load and Page Changes
-  useEffect(() => {
-    fetchData(page, filteredString);
-  }, [page, filteredString, fetchData]); // added fetchData to dependency array
-
-  // Keep filtered list synced when main list updates (if no search is active)
-  useEffect(() => {
-    if (filteredString === '') {
-      setFilteredMedicines(medicines);
-    }
-  }, [medicines, filteredString]);
-
-
-  // Handle Delete
-  const handleDelete = useCallback(async (id) => {
-    if (window.confirm("Are you sure you want to delete this medicine?")) {
-       try {
-         // await apis.noTokenStatusDeleteRequest('/pharmacy', id);
-         setMedicines(prev => prev.filter(m => m._id !== id));
-         toast.success("Medicine deleted.");
-       } catch (error) {
-         toast.error("Failed to delete.");
-       }
-    }
-  }, []);
-
-  // Infinite Scroll Observer
-  const lastElementRef = useCallback((node) => {
-    if (loading) return;
-    if (observer.current) observer.current.disconnect();
-    
-    observer.current = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && hasMore) {
-        setPage((prevPage) => prevPage + 1);
-      }
-    });
-    
-    if (node) observer.current.observe(node);
-  }, [hasMore, loading]);
-
-  return (
-    <Box>
-      <Typography variant="h4" fontWeight="bold" gutterBottom>
-        Pharmacy Inventory
-      </Typography>
-      
-      <Card sx={{ mt: 3, boxShadow: 3 }}>
-        <CardContent>
-          <Grid container spacing={3}>
-            
-            {/* Search Bar */}
-            <Grid size={{ xs: 12 }}>
-              <InventoryAutocomplete 
-                setHasMore={setHasMore} 
-                setFilteredString={setFilteredString} 
-                setFilteredMedicines={setFilteredMedicines} 
-              />
-            </Grid>
-
-            {/* Main Table */}
-            <Grid size={{ xs: 12 }}>
-              <MedicinesTable  
-                hasMore={hasMore} 
-                lastElementRef={lastElementRef} 
-                medicines={filteredMedicines} 
-                setMedicines={setFilteredMedicines} // Pass setter down so table can update it inline
-                handleDelete={handleDelete} 
-              />
-            </Grid>
-
-          </Grid>
+                  )
+                : undefined
+            }
+            pagination={{
+              count: result.total,
+              page,
+              rowsPerPage,
+              rowsPerPageOptions: ROWS_PER_PAGE_OPTIONS,
+              onPageChange: (e, newPage) => setPage(newPage),
+              onRowsPerPageChange: (e) => {
+                setRowsPerPage(parseInt(e.target.value, 10));
+                setPage(0);
+              },
+            }}
+          />
         </CardContent>
       </Card>
+
+      {/* Mounted only while editing so the form always starts from that medicine's values. */}
+      {editing && (
+        <MedicineEditDialog
+          key={editing._id}
+          medicine={editing}
+          categories={categories}
+          onSave={saveEdit}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+
+      {stocking && <AddStockDialog key={stocking._id} medicine={stocking} onSave={saveStock} onCancel={() => setStocking(null)} />}
+
+      <ConfirmDialog
+        open={toDelete !== null}
+        message={`Delete the medicine "${toDelete?.name ?? ''}"? It will be removed from the inventory.`}
+        onConfirm={confirmDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </Box>
   );
 }
 
 // NEXT.JS SECURITY GATE
 InventoryPage.layout = 'dashboard';
-InventoryPage.allowedRoles = ['admin', 'pharmacist'];
+InventoryPage.requiredPermissions = PAGE_ACCESS.pharmacyInventory;

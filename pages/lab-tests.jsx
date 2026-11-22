@@ -39,7 +39,7 @@ export default function LabTestsCatalogPage() {
   );
 
   return (
-    <Box sx={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
+    <Box sx={{ flexGrow: 1, backgroundColor: '#f5f5f5' }}>
       <AppBar position="sticky" sx={{ backgroundColor: 'white', color: 'primary.main' }}>
         <Toolbar>
           <ScienceIcon sx={{ mr: 2 }} />

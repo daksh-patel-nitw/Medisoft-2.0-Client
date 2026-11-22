@@ -1,163 +1,143 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Autocomplete, TextField, Box, Typography } from '@mui/material';
 import { debounce } from '@mui/material/utils';
 import PersonIcon from "@mui/icons-material/Person";
 import { apis } from '../services/commonServices';
-import usePatientStore from '../store/usePatientStore'; // <-- Import Zustand Store
+import usePatientStore from '../store/usePatientStore';
 
-const arr = ["pname", "pid", "mobile"];
-const arr2 = ["Name", "ID", "Mobile"];
+// The three boxes: index 1 = name, 2 = id, 3 = mobile.
+const FIELDS = ["pname", "pid", "mobile"];
+const LABELS = ["Name", "ID", "Mobile"];
+// The API's searchType for each box.
+const SEARCH_TYPES = ["name", "id", "mob"];
+// The API needs at least this many characters (mobile: 5 digits).
+const MIN_LENGTH = [3, 3, 5];
+// Characters each box accepts.
+const ALLOWED = [/^[a-zA-Z ]*$/, /^[A-Z0-9]*$/, /^[0-9]*$/];
+const ERROR_MESSAGES = [
+  "Characters allowed are A-Z, a-z and spaces",
+  "Characters allowed are A-Z, 0-9",
+  "Only numbers are allowed",
+];
 
-export const PatientAutocomplete = ({ index, setPatient, patient, opd }) => {
-  const [value, setValue] = useState(null);
-  const [isManualInput, setIsManualInput] = useState(false);
+/**
+ * One of the three patient-finder boxes (name / ID / mobile). Use all three
+ * together (see PatientFinder). They share a store (store/usePatientStore.js):
+ *  - picking a patient in ANY box fills all three boxes with that patient's
+ *    name, ID and mobile;
+ *  - clearing (the X, or emptying the box) clears all three boxes and the
+ *    list of fetched patients.
+ *
+ * @param {1|2|3} index - which box this is
+ * @param {(patient: {pname, pid, mobile} | null) => void} setPatient - told whenever the picked patient changes
+ * @param {{pname, pid, mobile} | null} patient - the currently picked patient (owned by the parent)
+ */
+export const PatientAutocomplete = ({ index, setPatient, patient }) => {
   const [error, setError] = useState(false);
+  const requestId = useRef(0); // lets a slow, older search be ignored
 
-  // ZUSTAND: Extract state and actions directly
-  const inputValues = usePatientStore((state) => state.inputValues);
+  const inputValue = usePatientStore((state) => state.inputValues[FIELDS[index - 1]]);
   const options = usePatientStore((state) => state.options);
-  const activeAutoComplete = usePatientStore((state) => state.activeAutoComplete);
-  
-  const setPatientOptions = usePatientStore((state) => state.setPatientOptions);
-  const clearPatient = usePatientStore((state) => state.clearPatient);
-  const setActiveAutoComplete = usePatientStore((state) => state.setActiveAutoComplete);
   const setPatientAutoComp = usePatientStore((state) => state.setPatientAutoComp);
+  const setPatientOptions = usePatientStore((state) => state.setPatientOptions);
+  const selectPatient = usePatientStore((state) => state.selectPatient);
+  const clearPatient = usePatientStore((state) => state.clearPatient);
 
-  useEffect(() => {
-    setValue(patient);
-  }, [patient]);
-
-  // Debounce API Call
+  // Debounced search: POST /reception/filteredpatients with one filter ->
+  // [{ pname, pid, mobile }]. (Reception 1, the pharmacy and the lab can use it.)
   const fetchPatients = useMemo(
     () =>
-      debounce(async (query, active) => {
-        if (!query) return;
+      debounce(async (query, isStillWanted) => {
         try {
-          // opd flag determines if we are fetching for OPD registration vs General
-          const response = await apis.noTokengetRequest(`/member/patient?search=${query.toString()}&flag=${index}&opd=${opd ? 1 : 0}`);
-          
-          if (active) {
-            setPatientOptions(response || []); // Store in Zustand
-          }
+          const response = await apis.postReadRequest('/reception/filteredpatients', [
+            { searchtext: query, searchType: SEARCH_TYPES[index - 1] },
+          ]);
+          if (isStillWanted()) setPatientOptions(response || []);
         } catch (err) {
           console.error('Error fetching patients:', err);
         }
       }, 500),
-    [index, opd, setPatientOptions]
+    [index, setPatientOptions]
   );
 
-useEffect(() => {
-    let active = true;
-    
-    // Safely get the current input value for this specific field index
-    const currentInputString = inputValues[arr[index - 1]];
+  const handleInputChange = (event, text, reason) => {
+    // Picking an option or clearing is handled in onChange; only react to typing here.
+    if (reason !== 'input') return;
 
-    // ----------------------------------------------------
-    // THE FIX: Remove clearPatient() from here!
-    // ----------------------------------------------------
-    if (!currentInputString || currentInputString === '') {
-      setValue(null);
-      // We rely on the `onChange` handler further down to call clearPatient()
-      // when the user actually clicks the 'X' button to clear the field.
-      return;
-    }
+    const valid = ALLOWED[index - 1].test(text);
+    setError(!valid);
+    if (!valid) return;
 
-    if (isManualInput && activeAutoComplete === index) {
-      if (index === 3) {
-        if (currentInputString.length >= 5) {
-          fetchPatients(currentInputString, active);
-        }
-      } else if (currentInputString.length >= 3) {
-        fetchPatients(currentInputString, active);
-      }
-    }
+    setPatientAutoComp(FIELDS[index - 1], text);
 
-    return () => {
-      active = false;
-    };
-  // Also remove clearPatient from the dependency array below:
-  }, [inputValues, isManualInput, activeAutoComplete, index, fetchPatients]);
-  // Determine which other two fields to display in the subtitle
-  const others = [1, 2, 3].filter(i => i !== index);
-
-  const getErrMsg = (idx) => {
-    switch (idx) {
-      case 1: return "Characters allowed are A-Z, a-z and spaces";
-      case 2: return "Characters allowed are A-Z, 0-9";
-      case 3: return "Only numbers are allowed";
-      default: return "";
+    const id = ++requestId.current;
+    if (text.length >= MIN_LENGTH[index - 1]) {
+      fetchPatients(text, () => id === requestId.current);
+    } else {
+      // too short to search: drop any older list rather than leave stale results showing
+      setPatientOptions([]);
     }
   };
 
+  const handleChange = (event, newValue) => {
+    requestId.current += 1; // forget any search still in flight
+    if (newValue) {
+      selectPatient(newValue); // all three boxes now show this patient
+    } else {
+      clearPatient(); // all three boxes and the fetched list are emptied
+    }
+    setError(false);
+    if (setPatient) setPatient(newValue || null);
+  };
+
+  // Show the other two details under each option
+  const others = [1, 2, 3].filter((i) => i !== index);
+
   return (
     <Autocomplete
-      getOptionLabel={(option) => option[arr[index - 1]]?.toString() || ''}
+      value={patient ?? null}
+      inputValue={inputValue}
+      onInputChange={handleInputChange}
+      onChange={handleChange}
       options={options}
-      autoComplete
-      includeInputInList
-      filterSelectedOptions
-      value={value}
+      getOptionLabel={(option) => option[FIELDS[index - 1]]?.toString() || ''}
+      isOptionEqualToValue={(option, value) => option.pid === value.pid}
+      // The server already filtered the list; don't filter it again on the typed text.
+      filterOptions={(x) => x}
       noOptionsText="No patients found"
-      onChange={(event, newValue) => {
-        setValue(newValue);
-        if (setPatient) setPatient(newValue);
-        setIsManualInput(false);
-        
-        if (!newValue) {
-          clearPatient();
-        }
-        
-        setActiveAutoComplete(null); // Reset active field after selection
-      }}
-      onInputChange={(event, newInputValue) => {
-        const isValid = (() => {
-          switch (index) {
-            case 1: return /^[a-zA-Z ]*$/.test(newInputValue); // Name
-            case 2: return /^[A-Z0-9]*$/.test(newInputValue); // ID
-            case 3: return /^[0-9]*$/.test(newInputValue); // Mobile
-            default: return false;
-          }
-        })();
-        
-        setError(!isValid);
-        
-        if (isValid) {
-          // ZUSTAND: Update specific field in the global store
-          setPatientAutoComp(arr[index - 1], newInputValue);
-          setIsManualInput(true);
-        }
-      }}
-      onFocus={() => setActiveAutoComplete(index)} // Set active on focus
       renderInput={(params) => (
         <TextField
           {...params}
           error={error}
-          label={error ? getErrMsg(index) : `Search Patient ${arr2[index - 1]}`}
+          label={error ? ERROR_MESSAGES[index - 1] : `Search Patient ${LABELS[index - 1]}`}
           fullWidth
-          size="small" // Keeps the UI clean and enterprise-looking
+          size="small"
           helperText={
-            error 
-              ? "Don't use special Characters" 
+            error
+              ? "Don't use special Characters"
               : index === 3 ? "Enter at least 5 digits" : "Enter at least 3 characters"
           }
         />
       )}
-      renderOption={(props, option) => (
-        <li {...props} key={option._id || option.pid}>
-          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-            <PersonIcon sx={{ color: 'text.secondary', mr: 1 }} />
-            <Box>
-              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                {option[arr[index - 1]] || 'Unknown'}
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {arr2[others[0] - 1]}: {option[arr[others[0] - 1]] || 'N/A'} <br /> 
-                {arr2[others[1] - 1]}: {option[arr[others[1] - 1]] || 'N/A'} 
-              </Typography>
+      renderOption={(props, option) => {
+        const { key, ...rest } = props;
+        return (
+          <li {...rest} key={option.pid}>
+            <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+              <PersonIcon sx={{ color: 'text.secondary', mr: 1 }} />
+              <Box>
+                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                  {option[FIELDS[index - 1]] || 'Unknown'}
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {LABELS[others[0] - 1]}: {option[FIELDS[others[0] - 1]] || 'N/A'} <br />
+                  {LABELS[others[1] - 1]}: {option[FIELDS[others[1] - 1]] || 'N/A'}
+                </Typography>
+              </Box>
             </Box>
-          </Box>
-        </li>
-      )}
+          </li>
+        );
+      }}
     />
   );
 };

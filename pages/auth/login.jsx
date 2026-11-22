@@ -1,57 +1,20 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter } from 'next/router';
 import Grid from '@mui/material/Grid2';
 import {
   TextField,
-  Button,
   Card,
   CardContent,
   Typography,
-  Box,
-  CircularProgress
+  Box
 } from '@mui/material';
-import { toast } from 'react-toastify';
-import axios from "axios";
 import { apis } from "../../services/commonServices";
-import MedicalProgressBar from "../../components/MedicalProgressBar";
+import CardActionButton from "../../components/CardActionButton";
 
 export default function LoginPage() {
   const router = useRouter();
   const [formValues, setFormValues] = useState({ uname: '', password: '' });
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-  // Prevents Next.js Hydration mismatch by waiting for the client to check localStorage
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-
-  useEffect(() => {
-    // Check if the user is already logged in when the page loads
-    const id = localStorage.getItem("id");
-    const type = localStorage.getItem("role");
-
-    if (id && type) {
-      redirectBasedOnRole(type);
-    } else {
-      setIsCheckingAuth(false);
-    }
-  }, []);
-
-  // Map roles to their specific Next.js page URLs
-  const redirectBasedOnRole = (role) => {
-    const routes = {
-      pharmacy: '/pharmacy/dispense',
-      ipd: '/ipd/dashboard',
-      opd1: '/reception/register',
-      opd2: '/reception/vitals',
-      doctor: '/doctor/dashboard',
-      lab: '/laboratory/patient-tests',
-      admin: '/admin/roles',
-      patient: '/patient/dashboard',
-      bill: '/billing/dashboard'
-    };
-
-    const destination = routes[role] || '/';
-    router.push(destination);
-  };
 
   const handleInputChange = (event) => {
     const { name, value } = event.target;
@@ -62,37 +25,33 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoggingIn(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-      const user = await apis.postRequest(`${apiUrl}/auth/login`, formValues);
-      console.log(user);
-      localStorage.setItem('id', user.mid);
-      localStorage.setItem('uname', user.name);
-      localStorage.setItem('role', user.role);
-      redirectBasedOnRole(user.role);
+      // Login sends no user data back - just the session cookies (and a
+      // 'FTLG' marker when the account still has its temporary password).
+      // Every protected page loads the current user itself.
+      const result = await apis.postRequest('/auth/login', formValues);
+
+      if (result === 'FTLG') {
+        // Only the username is handed over (sessionStorage, never the URL);
+        // the temporary password is typed again on the next page.
+        sessionStorage.setItem('firstLoginUname', formValues.uname);
+        router.push('/auth/first-login');
+        return;
+      }
+      router.push('/home');
     } catch (error) {
+      // The shared http client already toasted the server's message.
       console.error("Login Error:", error);
-      toast.error('Network Error: Unable to reach the server');
       setIsLoggingIn(false);
     }
   };
 
-  // Show a loading spinner while Next.js checks localStorage on mount
-  if (isCheckingAuth) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh" bgcolor="#f4f6f8">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
   return (
     <>
-      <MedicalProgressBar open={isLoggingIn} label="Signing you in..." />
       <Box
         display="flex"
         justifyContent="center"
         alignItems="center"
-        minHeight="100vh"
+        flexGrow={1}
         bgcolor="#f4f6f8" // Subtle background color to make the white card pop
       >
       <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '400px' }}>
@@ -137,17 +96,9 @@ export default function LoginPage() {
               </Grid>
 
               <Grid size={{ xs: 12 }} mt={2}>
-                <Button
-                  type="submit"
-                  color="primary"
-                  variant="contained"
-                  fullWidth
-                  size="large"
-                  disabled={isLoggingIn}
-                  sx={{ fontWeight: 'bold', py: 1.5 }}
-                >
+                <CardActionButton type="submit" disabled={isLoggingIn}>
                   Login
-                </Button>
+                </CardActionButton>
               </Grid>
 
             </Grid>

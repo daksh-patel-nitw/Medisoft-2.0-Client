@@ -1,323 +1,185 @@
-import React, { useEffect, useState, useCallback } from 'react';
-// import Grid from '@mui/material/Grid2';
-// import { 
-//   TableRow, 
-//   TableCell, 
-//   Button, 
-//   Card, 
-//   CardContent, 
-//   Tab, 
-//   Tabs,
-//   TableContainer,
-//   Table,
-//   TableHead,
-//   TableBody,
-//   Autocomplete,
-//   TextField,
-//   Typography,
-//   Box
-// } from '@mui/material';
-// import { toast } from 'react-toastify';
-// // NOTE: Make sure this path points to your actual service file
-// import pharmacyServices from '../../services/pharmacyServices'; 
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, CardContent, Box, Button, Typography, Checkbox } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { apis } from '../../services/commonServices';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import DataTable from '../../components/DataTable';
+import PatientFinder from '../../components/PatientFinder';
+import CardActionButton from '../../components/CardActionButton';
+import { PAGE_ACCESS } from '../../utils/pageAccess';
 
-// // ==========================================
-// // COMPONENT 1: Co-located Autocomplete
-// // ==========================================
-// const SearchAutocomplete = ({ name, label, handleSearch, arr, value = '' }) => {
-//   return (
-//     <Autocomplete
-//       freeSolo
-//       // Added fallback to empty array and fixed the "lenght" typo
-//       options={arr?.length > 0 ? arr.map((option) => option[name]) : []}
-//       onChange={(event, newValue) => handleSearch(newValue, name)}
-//       value={value}
-//       renderInput={(params) => (
-//         <TextField
-//           {...params}
-//           label={`Search by ${label}`}
-//           margin="normal"
-//           variant="outlined"
-//           size="small"
-//         />
-//       )}
-//     />
-//   );
-// };
-
-// // ==========================================
-// // MAIN PAGE COMPONENT
-// // ==========================================
-// export default function PharmacyBillingPage() {
-//   // Expecting medicines to be an array of two arrays: [ [Remaining], [Done] ]
-//   const [medicines, setMedicines] = useState([[], []]); 
-//   const [filteredMedicines, setFilteredMedicines] = useState([]);
-  
-//   const [fval, setFval] = useState({ pid: '', pname: '' });
-//   const [value, setValue] = useState(0); // Tab Index
-  
-//   const [clickedButtons, setClickedButtons] = useState([]);
-//   const [billed, setBill] = useState([]);
-//   const [total, setTotal] = useState(0);
-
-//   // Fetch initial data
-//   useEffect(() => {
-//     const fetchMedicine = async () => {
-//       try {
-//         const response = await pharmacyServices.fetchAllMedicines();
-//         // Ensure the response is actually [ [], [] ] format
-//         setMedicines(response.data || [[], []]); 
-//       } catch (error) {
-//         console.error(error);
-//         toast.error("Failed to load pending bills.");
-//       }
-//     };
-//     fetchMedicine();
-//   }, []);
-
-//   // Update filtered list when search values or main data changes
-//   useEffect(() => {
-//     const currentTabMedicines = medicines[value] || [];
-//     setFilteredMedicines(
-//       currentTabMedicines.filter((m) => 
-//         m.name?.toLowerCase().includes(fval.pid.toLowerCase()) || 
-//         m.name?.toLowerCase().includes(fval.pname.toLowerCase())
-//       )
-//     );
-//   }, [fval, medicines, value]);
-
-//   // Update Total whenever billed items change
-//   useEffect(() => {
-//     if (billed && billed.length > 0) {
-//       const calculatedTotal = billed.reduce((acc, m) => acc + (m.price * m.quantity), 0);
-//       setTotal(calculatedTotal.toFixed(2));
-//     } else {
-//       setTotal(0);
-//     }
-//   }, [billed]);
-
-//   // Search Handler
-//   const handleSearch = (newValue, name) => {
-//     const currentTabMedicines = medicines[value] || [];
-//     if (newValue) {
-//       setFilteredMedicines(
-//         currentTabMedicines.filter((m) => m[name]?.toLowerCase().includes(newValue.toLowerCase()))
-//       );
-//       setFval({ ...fval, [name]: newValue });
-//     } else {
-//       setFilteredMedicines(currentTabMedicines); // Reset to all if cleared
-//       setFval({ ...fval, [name]: '' });
-//     }
-//   };
-
-//   // Tab Change Handler
-//   const handleChange = (event, newValue) => {
-//     setValue(newValue);
-//     setFval({ pid: '', pname: '' });
-//     setFilteredMedicines(medicines[newValue] || []);
-//   };
-
-//   // Button States
-//   const isButtonDisabled = (m) => clickedButtons.includes(m._id);
-
-//   const handleClick = (m) => {
-//     setBill([...billed, m]);
-//     setClickedButtons((prev) => [...prev, m._id]);
-//   };
-
-//   // Print & Bill Logic
-//   const handleBill = () => {
-//     if (billed.length === 0) return;
-
-//     let tableHTML = "<table style='width: 100%; border-collapse: collapse; text-align: left;'>";
-//     tableHTML += "<tr><th style='border: 1px solid black; padding: 8px;'>Description</th><th style='border: 1px solid black; padding: 8px;'>Price</th><th style='border: 1px solid black; padding: 8px;'>Quantity</th><th style='border: 1px solid black; padding: 8px;'>Total</th></tr>";
-
-//     billed.forEach(item => {
-//       const itemTotal = (item.price * item.quantity).toFixed(2);
-//       tableHTML += `<tr><td style='border: 1px solid black; padding: 8px;'>${item.mname}</td><td style='border: 1px solid black; padding: 8px;'>₹${item.price}</td><td style='border: 1px solid black; padding: 8px;'>${item.quantity}</td><td style='border: 1px solid black; padding: 8px;'>₹${itemTotal}</td></tr>`;
-//     });
-
-//     tableHTML += `</table><h2>Total Amount: ₹${total}</h2>`;
-
-//     // Open Print Window
-//     const newWindow = window.open("", "", "height=600,width=800");
-//     newWindow.document.write("<html><head><title>Pharmacy Invoice</title></head><body>");
-//     newWindow.document.write("<h1>Pharmacy Invoice</h1>");
-//     newWindow.document.write(tableHTML);
-//     newWindow.document.write("</body></html>");
-//     newWindow.document.close();
-//     newWindow.focus();
-//     newWindow.addEventListener("afterprint", () => {
-//       newWindow.close();
-//     });
-//     newWindow.print();
-
-//     // API Call to finalize
-//     const updatedPayload = [...billed, tableHTML, total];
-//     pharmacyServices.finishMedOpd(updatedPayload)
-//       .then(response => {
-//         toast.success("Billing completed successfully!");
-//       })
-//       .catch(error => {
-//         console.error(error);
-//         toast.error("Error saving bill to database.");
-//       });
-
-//     // Move billed items from Remaining (index 0) to Done (index 1)
-//     setMedicines([
-//       (medicines[0] || []).filter((item) => !billed.some(b => b._id === item._id)), 
-//       [...(medicines[1] || []), ...billed]
-//     ]);
-    
-//     // Reset States
-//     setFilteredMedicines([]);
-//     setBill([]);
-//     setClickedButtons([]);
-//     setTotal(0);
-//   };
-
-//   const columns = ["Patient Id", "Appointment Date", "Medicine Name", "Units Req.", "Unit", "Price (₹)", "Amount", "Action"];
-
-//   return (
-//     <Box>
-//       <Typography variant="h4" fontWeight="bold" gutterBottom>
-//         Pharmacy POS & Billing
-//       </Typography>
-
-//       <Card sx={{ mt: 3, boxShadow: 3, minHeight: '75vh' }}>
-//         <CardContent>
-//           <Tabs
-//             value={value}
-//             indicatorColor="primary"
-//             textColor="primary"
-//             onChange={handleChange}
-//             sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
-//           >
-//             <Tab label="Pending Prescriptions" />
-//             <Tab label="Completed Bills" />
-//           </Tabs>
-
-//           <Grid container spacing={3} alignItems="center">
-//             {/* Search Fields */}
-//             <Grid size={{ xs: 12, md: 4 }}>
-//               <SearchAutocomplete 
-//                 name="pid" 
-//                 label="Patient ID" 
-//                 handleSearch={handleSearch} 
-//                 arr={medicines[value] || []} 
-//                 value={fval.pid} 
-//               />
-//             </Grid>
-//             <Grid size={{ xs: 12, md: 4 }}>
-//               <SearchAutocomplete 
-//                 name="pname" 
-//                 label="Patient Name" 
-//                 handleSearch={handleSearch} 
-//                 arr={medicines[value] || []} 
-//                 value={fval.pname} 
-//               />
-//             </Grid>
-
-//             {/* Total and Billing Actions (Only show on Pending Tab) */}
-//             {value === 0 && (
-//               <Grid container size={{ xs: 12, md: 4 }} alignItems="center" justifyContent="flex-end" spacing={2}>
-//                 <Grid>
-//                   <Typography variant="h5" fontWeight="bold" color={total > 0 ? 'success.main' : 'text.primary'}>
-//                     Total: ₹{total}
-//                   </Typography>
-//                 </Grid>
-                
-//                 {billed.length > 0 && (
-//                   <Grid>
-//                     <Box sx={{ display: 'flex', gap: 1 }}>
-//                       <Button variant="contained" color="primary" onClick={handleBill}>
-//                         Print & Bill
-//                       </Button>
-//                       <Button 
-//                         variant="outlined" 
-//                         color="error" 
-//                         onClick={() => { setBill([]); setClickedButtons([]); }}
-//                       >
-//                         Clear
-//                       </Button>
-//                     </Box>
-//                   </Grid>
-//                 )}
-//               </Grid>
-//             )}
-
-//             {/* Inlined Table */}
-//             <Grid size={{ xs: 12 }}>
-//               <TableContainer sx={{ maxHeight: '60vh' }}>
-//                 <Table stickyHeader size="small">
-//                   <TableHead>
-//                     <TableRow>
-//                       {columns.map((element, index) => (
-//                         // Hide the last two columns if we are on the "Done" tab
-//                         (value === 1 && (element === "Amount" || element === "Action")) ? null : (
-//                           <TableCell key={index} sx={{ backgroundColor: '#2c3e50', color: 'white', fontWeight: 'bold' }}>
-//                             {element}
-//                           </TableCell>
-//                         )
-//                       ))}
-//                     </TableRow>
-//                   </TableHead>
-//                   <TableBody>
-//                     {(filteredMedicines.length > 0 ? filteredMedicines : (medicines[value] || [])).map((m) => (
-//                       <TableRow key={m._id || m.pid} hover>
-//                         <TableCell>{m.pid}</TableCell>
-//                         <TableCell>
-//                           {new Date(m.createdAt).toLocaleDateString('en', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric' })}
-//                         </TableCell>
-//                         <TableCell>{m.mname}</TableCell>
-//                         <TableCell>{m.quantity}</TableCell>
-//                         <TableCell>{m.unit}</TableCell>
-//                         <TableCell>₹{m.price}</TableCell>
-                        
-//                         {/* Only show these cells on the Pending Tab */}
-//                         {value === 0 && (
-//                           <>
-//                             <TableCell>₹{(m.price * m.quantity).toFixed(2)}</TableCell>
-//                             <TableCell>
-//                               <Button
-//                                 disabled={isButtonDisabled(m)}
-//                                 variant="contained"
-//                                 color={isButtonDisabled(m) ? "success" : "primary"}
-//                                 size="small"
-//                                 onClick={() => handleClick(m)}
-//                               >
-//                                 {isButtonDisabled(m) ? "Added" : "Add to Bill"}
-//                               </Button>
-//                             </TableCell>
-//                           </>
-//                         )}
-//                       </TableRow>
-//                     ))}
-//                     {medicines[value]?.length === 0 && (
-//                       <TableRow>
-//                         <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-//                           <Typography color="text.secondary">
-//                             {value === 0 ? "No pending prescriptions to bill." : "No completed bills found."}
-//                           </Typography>
-//                         </TableCell>
-//                       </TableRow>
-//                     )}
-//                   </TableBody>
-//                 </Table>
-//               </TableContainer>
-//             </Grid>
-
-//           </Grid>
-//         </CardContent>
-//       </Card>
-//     </Box>
-//   );
-// }
-
-export default function PharmacyBillingPage () {
-  return <h1>Dispense Medicines - Coming Soon!</h1>;
+// The API stores a medicine's dosage time as a short code (MedicineTimeToDB on the server).
+const TIME_LABELS = {
+  BB: 'Before breakfast',
+  AB: 'After breakfast',
+  BL: 'Before lunch',
+  AL: 'After lunch',
+  S: 'Noon snacks',
+  O: 'Once in a day',
+  BD: 'Before dinner',
+  AD: 'After dinner',
+  BS: 'Before sleep',
 };
 
-// // NEXT.JS SECURITY GATE
+const formatDate = (value) => (value ? new Date(value).toLocaleDateString([], { dateStyle: 'medium' }) : '-');
+
+// ==========================================
+// STEP 2: the patient's paid medicines - tick what to hand over, then dispense
+// ==========================================
+function DispenseStep({ patient, onBack }) {
+  const [rows, setRows] = useState(null); // null = still loading
+  const [selected, setSelected] = useState(() => new Set());
+  const [reloadKey, setReloadKey] = useState(0);
+  const [confirming, setConfirming] = useState(false);
+
+  // GET /pharmacy/prescription?pid= returns the patient's paid medicines
+  // GROUPED BY APPOINTMENT: [{ aid, did, dname, schedule_date, items: [...] }].
+  // They are flattened into one table; every row keeps its visit's `aid`
+  // (needed to dispense) plus the doctor and date to show.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const groups = await apis.getRequest('/pharmacy/prescription', { pid: patient.pid });
+        const flat = (groups || []).flatMap((g) =>
+          g.items.map((item) => ({ ...item, aid: g.aid, dname: g.dname, schedule_date: g.schedule_date }))
+        );
+        if (!cancelled) {
+          setRows(flat);
+          setSelected(new Set(flat.map((r) => r._id))); // everything ticked to start with
+        }
+      } catch (error) {
+        if (!cancelled) setRows([]);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [patient.pid, reloadKey]);
+
+  const list = rows ?? [];
+  const allSelected = list.length > 0 && selected.size === list.length;
+
+  const toggleOne = (id) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(list.map((r) => r._id)));
+
+  const columns = useMemo(
+    () => [
+      {
+        key: 'sel',
+        minWidth: 48,
+        label: (
+          <Checkbox
+            size="small"
+            checked={allSelected}
+            indeterminate={selected.size > 0 && !allSelected}
+            onChange={toggleAll}
+            sx={{ color: 'inherit', p: 0.5, '&.Mui-checked, &.MuiCheckbox-indeterminate': { color: 'inherit' } }}
+            slotProps={{ input: { 'aria-label': 'Select all medicines' } }}
+          />
+        ),
+        render: (r) => <Checkbox size="small" checked={selected.has(r._id)} onChange={() => toggleOne(r._id)} sx={{ p: 0.5 }} />,
+      },
+      { key: 'mname', label: 'Medicine' },
+      { key: 'quantity', label: 'Quantity (units)', align: 'right' },
+      { key: 'time', label: 'When to take', render: (r) => TIME_LABELS[r.time] ?? r.time },
+      { key: 'dname', label: 'Doctor' },
+      { key: 'schedule_date', label: 'Visit date', render: (r) => formatDate(r.schedule_date) },
+    ],
+    // toggleOne / toggleAll only use setSelected and the current list
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, list]
+  );
+
+  const dispense = async () => {
+    setConfirming(false);
+    // One appointment at a time: the sell call takes the appointment id in the
+    // query and that appointment's prescription ids in the body.
+    const idsByAid = new Map();
+    for (const r of list) {
+      if (!selected.has(r._id)) continue;
+      idsByAid.set(r.aid, [...(idsByAid.get(r.aid) ?? []), r._id]);
+    }
+    try {
+      for (const [aid, ids] of idsByAid) {
+        await apis.putRequest(`/pharmacy/prescription?id=${encodeURIComponent(aid)}`, { ids });
+      }
+    } catch (error) {
+      // e.g. "Insufficient medicine stock." - already toasted by the http client.
+    } finally {
+      // Re-read either way: whatever was handed over before a failure is gone from the list.
+      setReloadKey((k) => k + 1);
+    }
+  };
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+        <Box>
+          <Typography variant="h6" fontWeight="bold">
+            {patient.pname}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {patient.pid} · {patient.mobile}
+          </Typography>
+        </Box>
+        <Button startIcon={<ArrowBackIcon />} onClick={onBack}>
+          Change patient
+        </Button>
+      </Box>
+
+      <DataTable
+        columns={columns}
+        rows={list}
+        getRowKey={(r) => r._id}
+        loading={rows === null}
+        emptyMessage="No paid medicines are waiting for this patient."
+        fillHeight
+      />
+
+      <CardActionButton onClick={() => setConfirming(true)} disabled={selected.size === 0}>
+        Dispense medicines{selected.size > 0 ? ` (${selected.size})` : ''}
+      </CardActionButton>
+
+      <ConfirmDialog
+        open={confirming}
+        message={`Hand over ${selected.size} medicine(s) to ${patient.pname}? Stock will be reduced.`}
+        onConfirm={dispense}
+        onCancel={() => setConfirming(false)}
+      />
+    </Box>
+  );
+}
+
+// ==========================================
+// MAIN PAGE COMPONENT: step 1 find the patient -> Next -> step 2 dispense
+// ==========================================
+export default function PharmacyBillingPage() {
+  const [patient, setPatient] = useState(null);
+
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', height: '100%' }}>
+      <Card sx={{ width: '100%', maxWidth: 1000, boxShadow: 3, height: '100%', minHeight: 420, display: 'flex', flexDirection: 'column' }}>
+        <CardContent sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pb: '16px !important' }}>
+          {patient ? (
+            <DispenseStep patient={patient} onBack={() => setPatient(null)} />
+          ) : (
+            <PatientFinder onNext={setPatient} />
+          )}
+        </CardContent>
+      </Card>
+    </Box>
+  );
+}
+
+// NEXT.JS SECURITY GATE
 PharmacyBillingPage.layout = 'dashboard';
-PharmacyBillingPage.allowedRoles = ['admin', 'pharmacist'];
+PharmacyBillingPage.requiredPermissions = PAGE_ACCESS.pharmacyDispense;

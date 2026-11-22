@@ -1,310 +1,268 @@
-import React, { useState, useEffect } from 'react';
-import Grid from '@mui/material/Grid2';
-import {
-  Card,
-  CardContent,
-  Tabs,
-  Tab,
-  Button,
-  Typography,
-  TableContainer,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  Paper,
-  TextField,
-  Box,
-  CircularProgress
-} from '@mui/material';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, CardContent, Tabs, Tab, Box, Button, Typography, TextField, Chip, Skeleton } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { toast } from 'react-toastify';
 import { apis } from '../../services/commonServices';
-import { PatientAutocomplete } from '../../components/patientAutoComp';
-import usePatientStore from '../../store/usePatientStore'; // <-- Zustand Store
+import { decodeToFlags } from '../../utils/permissions.util';
+import PatientFinder from '../../components/PatientFinder';
+import { PAGE_ACCESS } from '../../utils/pageAccess';
+
+// Lab prescription status codes (LabStatus on the server).
+const STATUS_PAID = 'B'; // paid, waiting for the sample
+const STATUS_TAKEN = 'T'; // sample taken, waiting for the report
+
+// Same rule the API enforces for the sample details (letters, spaces, ' and -).
+const DETAILS_PATTERN = /^[\p{L}\p{M}\s'-]+$/u;
+const MAX_REPORT_BYTES = 1024 * 1024; // the API rejects PDFs over 1 MB
+
+const formatDate = (value) => (value ? new Date(value).toLocaleDateString([], { dateStyle: 'medium' }) : '-');
 
 // ==========================================
-// REUSABLE COMPONENT: Lab Workflow Tab
-// Handles both "Take Details" and "Add Results" modes
+// One test to process: sample details (tab 1) or a report upload (tab 2)
 // ==========================================
-const LabWorkflowTab = ({ mode }) => {
-  const [step, setStep] = useState(0); // 0 = Search Patient, 1 = Process Tests
-  const [patient, setPatient] = useState(null);
-  const [tests, setTests] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  
-  // Form States
-  const [details, setDetails] = useState({}); // Stores text inputs by test ID
-  const [files, setFiles] = useState({});     // Stores file uploads by test ID
+function TestCard({ test, mode, onDone }) {
+  const [pRange, setPRange] = useState('');
+  const [details, setDetails] = useState('');
+  const [file, setFile] = useState(null);
+  const [errors, setErrors] = useState({});
 
-  // Zustand
-  const clearPatientGlobal = usePatientStore((state) => state.clearPatient);
-
-  // Fetch tests when entering Step 1
-  // useEffect(() => {
-  //   // if (step === 1 && patient) {
-  //   //   const fetchTests = async () => {
-  //   //     setIsLoading(true);
-  //   //     try {
-  //   //       const body = { 
-  //   //         pid: patient.pid,
-  //   //         status: mode === 'details' ? "B" : "T" // B = Booked, T = Taken
-  //   //       };
-  //   //       const data = await apis.noTokenPostRequest('/lab/prescription', body);
-  //   //       setTests(data || []);
-  //   //     } catch (error) {
-  //   //       toast.error("Failed to fetch patient tests.");
-  //   //     } finally {
-  //   //       setIsLoading(false);
-  //   //     }
-  //   //   };
-  //   //   fetchTests();
-  //   // }
-  // }, [step, patient, mode]);
-
-  // Handle resetting back to search
-  const handleGoBack = () => {
-    setStep(0);
-    setPatient(null);
-    setTests([]);
-    setDetails({});
-    setFiles({});
-    clearPatientGlobal();
-  };
-
-  const handleNext = () => {
-    if (!patient) {
-      toast.warn("Please select a patient first.");
-      return;
+  const saveSample = async () => {
+    const found = {};
+    for (const [field, value] of [['p_range', pRange], ['details', details]]) {
+      if (value.trim() && !DETAILS_PATTERN.test(value.trim())) found[field] = "Letters, spaces, ' and - only";
     }
-    setStep(1);
-  };
-
-  // ----- ACTION: Take Details (Mode: 'details') -----
-  const handleTakeTest = async (testId) => {
-    if (!details[testId]) {
-      toast.warn("Please enter the Patient Details to proceed.");
-      return;
-    }
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
 
     try {
-      const body = { 
-        id: testId, 
-        status: "T", 
-        details: details[testId] 
-      };
-      const status = await apis.noTokenStatusPutRequest('/lab/details', body);
-      
-      if (status === 200) {
-        toast.success("Sample taken and details saved.");
-        setTests(tests.filter((t) => t._id !== testId));
-        setDetails(prev => ({ ...prev, [testId]: "" }));
-      }
+      // `aid` here is the lab prescription's own id (the API's field is named that way).
+      await apis.putRequest('/laboratory/details', {
+        aid: test._id,
+        ...(pRange.trim() && { p_range: pRange.trim() }),
+        ...(details.trim() && { details: details.trim() }),
+      });
+      onDone();
     } catch (error) {
-      toast.error("Failed to save details.");
+      // Already toasted by the http client; keep what was typed.
     }
   };
 
-  // ----- ACTION: Upload Report (Mode: 'results') -----
-  const handleUploadReport = async (testId) => {
-    const file = files[testId];
+  const pickFile = (event) => {
+    const chosen = event.target.files?.[0] ?? null;
+    event.target.value = ''; // so choosing the same file again still fires onChange
+    if (!chosen) return;
+    if (chosen.type !== 'application/pdf') {
+      toast.error('The report must be a PDF file.');
+      return;
+    }
+    if (chosen.size > MAX_REPORT_BYTES) {
+      toast.error('The report must not exceed 1 MB.');
+      return;
+    }
+    setFile(chosen);
+  };
+
+  const uploadReport = async () => {
     if (!file) {
-      toast.warn("Please select a PDF file to upload.");
+      toast.error('Choose the report PDF first.');
       return;
     }
-    if (!details[testId]) {
-      toast.warn("Please enter the Patient Range to proceed.");
-      return;
-    }
-
+    const formData = new FormData();
+    formData.append('id', test._id);
+    formData.append('report', file);
     try {
-      const formData = new FormData();
-      formData.append("id", testId);
-      formData.append("status", "D"); // D = Done
-      formData.append("report", file);
-      formData.append("p_range", details[testId]);
-
-      const status = await apis.uploadFileRequest("/lab/details", formData);
-      
-      if (status === 200) {
-        toast.success("Report uploaded successfully.");
-        setTests(tests.filter((t) => t._id !== testId));
-        setFiles(prev => ({ ...prev, [testId]: null }));
-        setDetails(prev => ({ ...prev, [testId]: "" }));
-      }
+      await apis.uploadFilePutRequest('/laboratory/report', formData);
+      onDone();
     } catch (error) {
-      toast.error("Failed to upload report.");
+      // Already toasted by the http client; keep the chosen file.
     }
   };
 
-  // ==========================================
-  // RENDER: STEP 0 (Search Patient)
-  // ==========================================
-  if (step === 0) {
-    return (
-      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <CardContent sx={{ flexGrow: 1 }}>
-          <Typography variant="h6" gutterBottom>Find Patient</Typography>
-          <Grid container spacing={3}>
-            <Grid size={{ xs: 12 }}>
-              <PatientAutocomplete index={1} setPatient={setPatient} patient={patient} />
-            </Grid>
-            <Grid size={{ xs: 12 }}>
-              <PatientAutocomplete index={2} setPatient={setPatient} patient={patient} />
-            </Grid>
-            <Grid size={{ xs: 12 }}>
-              <PatientAutocomplete index={3} setPatient={setPatient} patient={patient} />
-            </Grid>
-          </Grid>
-        </CardContent>
-        <Box sx={{ p: 2, borderTop: '1px solid #e0e0e0' }}>
-          <Button variant="contained" fullWidth color="primary" onClick={handleNext} sx={{ height: "6vh", fontWeight: "bold", fontSize: "1.1rem" }}>
-            Next: View Tests
-          </Button>
-        </Box>
-      </Box>
-    );
-  }
-
-  // ==========================================
-  // RENDER: STEP 1 (Process Tests)
-  // ==========================================
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <CardContent sx={{ flexGrow: 1, overflowY: 'auto' }}>
-        <Box sx={{ mb: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-          <Typography variant="subtitle1">
-            <strong>Patient Name:</strong> {patient?.pname} | <strong>ID:</strong> {patient?.pid}
+    <Card variant="outlined" sx={{ mb: 2 }}>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+          <Typography variant="subtitle1" fontWeight="bold">
+            {test.tname}
           </Typography>
+          <Chip size="small" variant="outlined" label={`Dr. ${test.dname || '-'} · ${formatDate(test.schedule_date)}`} />
         </Box>
 
-        {isLoading ? (
-          <Box display="flex" justifyContent="center" p={4}><CircularProgress /></Box>
-        ) : tests.length === 0 ? (
-          <Typography variant="h6" color="textSecondary" align="center" sx={{ mt: 4 }}>
-            No pending tests found for {patient?.pname}.
-          </Typography>
+        {mode === 'sample' ? (
+          <>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Details to take from the patient: {test.pat_details || '-'}
+              {test.n_range ? ` · Normal range: ${test.n_range}` : ''}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <TextField
+                size="small"
+                label="Patient's reading"
+                value={pRange}
+                onChange={(e) => setPRange(e.target.value)}
+                error={Boolean(errors.p_range)}
+                helperText={errors.p_range || ' '}
+                sx={{ flex: '1 1 220px' }}
+              />
+              <TextField
+                size="small"
+                label="Details collected"
+                value={details}
+                onChange={(e) => setDetails(e.target.value)}
+                error={Boolean(errors.details)}
+                helperText={errors.details || ' '}
+                sx={{ flex: '2 1 280px' }}
+              />
+              <Button variant="contained" onClick={saveSample} sx={{ height: 40 }}>
+                Save sample details
+              </Button>
+            </Box>
+          </>
         ) : (
-          <TableContainer component={Paper} sx={{ boxShadow: 2 }}>
-            <Table size="small">
-              <TableHead sx={{ bgcolor: '#2c3e50' }}>
-                <TableRow>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Test Name</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Normal Range</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
-                    {mode === 'details' ? 'Action' : 'Upload Report'}
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {tests.map((t) => (
-                  <TableRow key={t._id} hover>
-                    <TableCell sx={{ fontWeight: 500 }}>{t.tname}</TableCell>
-                    <TableCell>
-                      {new Date(t.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
-                    </TableCell>
-                    <TableCell>{t.n_range}</TableCell>
-                    
-                    <TableCell sx={{ minWidth: 250 }}>
-                      {mode === 'details' ? (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                          <TextField
-                            size="small"
-                            label="Enter Sample/Patient Details"
-                            value={details[t._id] || ""}
-                            onChange={(e) => setDetails({ ...details, [t._id]: e.target.value })}
-                            fullWidth
-                            multiline
-                            rows={2}
-                          />
-                          <Button variant="contained" color="primary" size="small" onClick={() => handleTakeTest(t._id)}>
-                            Take Sample
-                          </Button>
-                        </Box>
-                      ) : (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                          <TextField
-                            size="small"
-                            label="Upload PDF Report"
-                            type="file"
-                            slotProps={{ htmlInput: { accept: ".pdf" }, inputLabel: { shrink: true } }}
-                            onChange={(e) => setFiles({ ...files, [t._id]: e.target.files[0] })}
-                            fullWidth
-                          />
-                          <TextField
-                            size="small"
-                            label="Patient Result/Range"
-                            value={details[t._id] || ""}
-                            onChange={(e) => setDetails({ ...details, [t._id]: e.target.value })}
-                            fullWidth
-                          />
-                          <Button variant="contained" color="success" size="small" onClick={() => handleUploadReport(t._id)}>
-                            Upload & Complete
-                          </Button>
-                        </Box>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {test.details ? `Sample details: ${test.details}` : 'Sample taken.'}
+              {test.p_range ? ` · Reading: ${test.p_range}` : ''}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Button component="label" variant="outlined" startIcon={<UploadFileIcon />}>
+                Choose PDF report
+                <input hidden type="file" accept="application/pdf" onChange={pickFile} />
+              </Button>
+              <Typography variant="body2" color={file ? 'text.primary' : 'text.secondary'} sx={{ flexGrow: 1 }}>
+                {file ? file.name : 'No file chosen (PDF, up to 1 MB)'}
+              </Typography>
+              <Button variant="contained" onClick={uploadReport} disabled={!file} sx={{ height: 40 }}>
+                Upload report
+              </Button>
+            </Box>
+          </>
         )}
       </CardContent>
+    </Card>
+  );
+}
 
-      <Box sx={{ p: 2, borderTop: '1px solid #e0e0e0' }}>
-        <Button variant="outlined" fullWidth color="inherit" onClick={handleGoBack} sx={{ height: "6vh", fontWeight: "bold", fontSize: "1.1rem" }}>
-          Go Back
+// ==========================================
+// STEP 2: the patient's tests that are ready for this tab's work
+// ==========================================
+function LabStep({ patient, mode, onBack }) {
+  const [tests, setTests] = useState(null); // null = still loading
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const wantedStatus = mode === 'sample' ? STATUS_PAID : STATUS_TAKEN;
+
+  // POST /laboratory/prescription?pid= returns the patient's tests GROUPED BY
+  // APPOINTMENT: [{ aid, did, dname, schedule_date, items: [...] }]. Keep the
+  // tests in the status this tab works on, each tagged with its visit's doctor and date.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const groups = await apis.postReadRequest(`/laboratory/prescription?pid=${encodeURIComponent(patient.pid)}`);
+        const flat = (groups || []).flatMap((g) =>
+          g.items
+            .filter((t) => t.status === wantedStatus)
+            .map((t) => ({ ...t, aid: g.aid, dname: g.dname, schedule_date: g.schedule_date }))
+        );
+        if (!cancelled) setTests(flat);
+      } catch (error) {
+        if (!cancelled) setTests([]);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [patient.pid, wantedStatus, reloadKey]);
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+        <Box>
+          <Typography variant="h6" fontWeight="bold">
+            {patient.pname}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {patient.pid} · {patient.mobile}
+          </Typography>
+        </Box>
+        <Button startIcon={<ArrowBackIcon />} onClick={onBack}>
+          Change patient
         </Button>
+      </Box>
+
+      <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', pr: 0.5 }}>
+        {tests === null ? (
+          [1, 2].map((i) => <Skeleton key={i} variant="rectangular" height={120} sx={{ mb: 2, borderRadius: 1 }} />)
+        ) : tests.length === 0 ? (
+          <Typography color="text.secondary" align="center" sx={{ mt: 4 }}>
+            {mode === 'sample' ? 'No paid tests are waiting for a sample.' : 'No tests are waiting for a report.'}
+          </Typography>
+        ) : (
+          tests.map((t) => <TestCard key={t._id} test={t} mode={mode} onDone={() => setReloadKey((k) => k + 1)} />)
+        )}
       </Box>
     </Box>
   );
-};
+}
+
+// One tab's whole flow: find the patient -> Next -> their tests
+function LabWorkflowTab({ mode }) {
+  const [patient, setPatient] = useState(null);
+  return patient ? <LabStep patient={patient} mode={mode} onBack={() => setPatient(null)} /> : <PatientFinder onNext={setPatient} />;
+}
 
 // ==========================================
 // MAIN PAGE COMPONENT
 // ==========================================
-export default function PatientTestsPage() {
-  const [tabValue, setTabValue] = useState(0);
+export default function PatientTestsPage({ currentUser }) {
+  // Decoded once per currentUser change; viewing is the page gate, each tab needs its own permission.
+  const flags = useMemo(() => decodeToFlags(currentUser?.permissions), [currentUser?.permissions]);
+  const tabs = [
+    flags.has('updateLabPrescriptionStatus') && { value: 'sample', label: 'Take Sample Details' },
+    flags.has('uploadLabReport') && { value: 'report', label: 'Add Report' },
+  ].filter(Boolean);
 
-  const handleTabChange = (event, newValue) => {
-    setTabValue(newValue);
-  };
+  const [tab, setTab] = useState(null);
+  const activeTab = tabs.find((t) => t.value === tab)?.value ?? tabs[0]?.value;
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto', mt: 2 }}>
-      <Typography variant="h4" fontWeight="bold" gutterBottom>
-        Patient Lab Processing
-      </Typography>
-
-      <Grid container justifyContent="center" mt={3}>
-        <Grid size={{ xs: 12, md: 8, lg: 6 }}>
-          <Card sx={{ height: '75vh', display: 'flex', flexDirection: 'column', boxShadow: 3 }}>
-            
+    <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', height: '100%' }}>
+      <Card sx={{ width: '100%', maxWidth: 900, boxShadow: 3, height: '100%', minHeight: 420, display: 'flex', flexDirection: 'column' }}>
+        {tabs.length === 0 ? (
+          <CardContent>
+            <Typography color="text.secondary" align="center" sx={{ mt: 4 }}>
+              Your role can view lab tests but not take samples or add reports.
+            </Typography>
+          </CardContent>
+        ) : (
+          <>
             <Tabs
-              value={tabValue}
+              value={activeTab}
               indicatorColor="primary"
               textColor="primary"
-              onChange={handleTabChange}
+              onChange={(e, next) => setTab(next)}
               variant="fullWidth"
-              sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f8f9fa' }}
+              sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 48 }}
             >
-              <Tab label="1. Take Sample Details" sx={{ fontWeight: 'bold' }} />
-              <Tab label="2. Add Test Results" sx={{ fontWeight: 'bold' }} />
+              {tabs.map((t) => (
+                <Tab key={t.value} value={t.value} label={t.label} />
+              ))}
             </Tabs>
 
-            {/* Mount completely isolated instances of the workflow tab */}
-            {tabValue === 0 && <LabWorkflowTab mode="details" />}
-            {tabValue === 1 && <LabWorkflowTab mode="results" />}
-
-          </Card>
-        </Grid>
-      </Grid>
+            <CardContent sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pb: '16px !important' }}>
+              {/* keyed by tab so switching tabs starts that tab's flow from the patient search */}
+              <LabWorkflowTab key={activeTab} mode={activeTab} />
+            </CardContent>
+          </>
+        )}
+      </Card>
     </Box>
   );
 }
 
 // NEXT.JS SECURITY GATE
 PatientTestsPage.layout = 'dashboard';
-PatientTestsPage.allowedRoles = ['admin', 'lab_technician'];
+PatientTestsPage.requiredPermissions = PAGE_ACCESS.labPatientTests;

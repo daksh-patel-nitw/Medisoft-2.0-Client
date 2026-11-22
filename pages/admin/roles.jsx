@@ -6,64 +6,80 @@ import {
   CardContent,
   Tabs,
   Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Button,
   TextField,
-  TablePagination,
   Autocomplete,
   Box,
   Typography,
   Skeleton,
   Divider
 } from '@mui/material';
-import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import { apis } from '../../services/commonServices';
 import useRefreshStore from '../../store/useRefreshStore';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import CardActionButton from '../../components/CardActionButton';
+import DataTable from '../../components/DataTable';
+import { PAGE_ACCESS } from '../../utils/pageAccess';
+
+// Active-roles table columns for the shared DataTable (the Revoke button is its actions column).
+const COLUMNS = [
+  { key: 'name', label: 'Name' },
+  {
+    key: 'role',
+    label: 'Role',
+    render: (e) => (
+      <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'secondary.main' }}>
+        {e.role}
+      </Typography>
+    ),
+  },
+  { key: 'mobile', label: 'Mobile' },
+  { key: 'email', label: 'Email' },
+  { key: 'dep', label: 'Department' },
+];
+
+// The card fills the space the layout leaves (no page scrollbar); the table scrolls inside it.
+const CARD_HEIGHT = '100%';
 
 // ==========================================
 // THE SKELETON LOADER COMPONENT
 // ==========================================
 const RoleManagementSkeleton = () => (
-  <Box sx={{ width: '100%', maxWidth: 800, mt: 3, height: '70vh', display: 'flex', flexDirection: 'column' }}>
-    <Skeleton variant="rectangular" height={48} sx={{ borderRadius: 1, mb: 1 }} />
-    <Card sx={{ boxShadow: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-      <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-        <Grid container spacing={3}>
-          <Grid size={{ xs: 12, md: 4 }}><Skeleton variant="rectangular" height={40} sx={{ borderRadius: 1 }} /></Grid>
-          <Grid size={{ xs: 12, md: 4 }}><Skeleton variant="rectangular" height={40} sx={{ borderRadius: 1 }} /></Grid>
-          <Grid size={{ xs: 12, md: 4 }}><Skeleton variant="rectangular" height={40} sx={{ borderRadius: 1 }} /></Grid>
-          <Grid size={{ xs: 12 }}>
-            <Skeleton variant="rectangular" height={150} sx={{ borderRadius: 1 }} />
-          </Grid>
+  // Same shape as the real card - the tab bar is INSIDE it, not a bar floating above.
+  <Card sx={{ width: '100%', maxWidth: 800, height: CARD_HEIGHT, boxShadow: 3, display: 'flex', flexDirection: 'column' }}>
+    <Skeleton variant="rectangular" height={48} sx={{ flexShrink: 0 }} />
+    <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+      <Grid container spacing={3}>
+        <Grid size={{ xs: 12, md: 6 }}><Skeleton variant="rectangular" height={40} sx={{ borderRadius: 1 }} /></Grid>
+        <Grid size={{ xs: 12, md: 6 }}><Skeleton variant="rectangular" height={40} sx={{ borderRadius: 1 }} /></Grid>
+        <Grid size={{ xs: 12 }}>
+          <Skeleton variant="rectangular" height={150} sx={{ borderRadius: 1 }} />
         </Grid>
-        <Box sx={{ mt: 'auto' }}>
-          <Divider sx={{ mb: 2, mt: 2 }} />
-          <Skeleton variant="rectangular" height={40} sx={{ borderRadius: 1 }} />
-        </Box>
-      </CardContent>
-    </Card>
-  </Box>
+        <Grid size={{ xs: 12 }}><Skeleton variant="rectangular" height={40} sx={{ borderRadius: 1 }} /></Grid>
+      </Grid>
+      <Box sx={{ mt: 'auto' }}>
+        <Divider sx={{ mb: 2, mt: 2 }} />
+        <Skeleton variant="rectangular" height={40} sx={{ borderRadius: 1 }} />
+      </Box>
+    </CardContent>
+  </Card>
 );
 
 // ==========================================
 // MAIN PAGE COMPONENT
 // ==========================================
 export default function RoleManagementPage() {
-  const [emp, setEmp] = useState([]);         
-  const [loginEmp, setLoginEmp] = useState([]); 
-  const [panel, setPanel] = useState([]);       
+  const [emp, setEmp] = useState([]);
+  const [loginEmp, setLoginEmp] = useState([]);
+  const [panel, setPanel] = useState([]);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [value, setValue] = useState(0); 
+  const [value, setValue] = useState(0);
+  const [revokeTarget, setRevokeTarget] = useState(null); // { id, name, role }
 
   const [empValues, setEmpValues] = useState({ eid: '', name: '', role: '', dep: '', mobile: '' });
 
-  const [filtered, setFilter] = useState([]);
+  const [roleFilter, setRoleFilter] = useState(''); // '' = show every role
   const rowsPerPageOptions = [5, 7];
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(rowsPerPageOptions[0]);
@@ -85,7 +101,7 @@ export default function RoleManagementPage() {
       console.error("Failed to fetch roles data");
     } finally {
       setIsLoading(false);
-      finishRefresh(); 
+      finishRefresh();
     }
   };
 
@@ -112,11 +128,7 @@ export default function RoleManagementPage() {
         }
       }
     } else {
-      if (newValue) {
-        setFilter(loginEmp.filter((m) => m.role?.toLowerCase() === newValue.toLowerCase()));
-      } else {
-        setFilter([]);
-      }
+      setRoleFilter(newValue || '');
       setPage(0);
     }
   };
@@ -147,15 +159,15 @@ export default function RoleManagementPage() {
     } catch (error) {}
   };
 
-  const deleteT = async (id, name, role) => {
-    if (!window.confirm(`Are you sure you want to revoke this ${role} role for ${name}?`)) return;
-
+  const confirmRevoke = async () => {
+    const { id } = revokeTarget;
+    setRevokeTarget(null);
     try {
       await apis.deleteRequest(`/admin/employees/${id}`);
 
       const employeeToMove = loginEmp.find(e => e.eid === id);
       if (employeeToMove) {
-        const { role, ...employeeWithoutRole } = employeeToMove; 
+        const { role, ...employeeWithoutRole } = employeeToMove;
         setLoginEmp(loginEmp.filter(e => e.eid !== id));
         setEmp([...emp, employeeWithoutRole]);
       }
@@ -169,26 +181,25 @@ export default function RoleManagementPage() {
       value={name === 'role' || !name ? empValues.role || null : empValues[name] || null}
       fullWidth
       renderInput={(params) => (
-        <TextField {...params} label={label} margin="normal" variant="outlined" size="small" />
+        <TextField {...params} label={label} margin="none" variant="outlined" size="small" />
       )}
     />
   );
 
+  // An active filter that matches nobody gives an empty table (the table then
+  // shows its "no records" message) - it must NOT fall back to showing everyone.
+  const rows = roleFilter
+    ? loginEmp.filter((m) => m.role?.toLowerCase() === roleFilter.toLowerCase())
+    : loginEmp;
+
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        width: '100%',
-        px: 2,
-        py: 2
-      }}
-    >
+    // One card, centered horizontally, with the two views as tabs. No top
+    // margin, so it sits directly under the breadcrumb.
+    <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', height: '100%' }}>
       {isLoading ? (
         <RoleManagementSkeleton />
       ) : (
-        <Card sx={{ width: '100%', maxWidth: 800, mt: 3, boxShadow: 3, height: '70vh', display: 'flex', flexDirection: 'column' }}>
+        <Card sx={{ width: '100%', maxWidth: 800, boxShadow: 3, height: CARD_HEIGHT, display: 'flex', flexDirection: 'column' }}>
           <Tabs
             value={value}
             indicatorColor="primary"
@@ -202,20 +213,18 @@ export default function RoleManagementPage() {
           </Tabs>
 
           <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', pb: '16px !important' }}>
-            
+
             {/* TAB 1: Assign Role Form */}
             {value === 0 && (
               <form onSubmit={handleEmpSubmit} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <Box sx={{ flexGrow: 1, overflowY: 'auto', px: 1 }}>
+                {/* pt: the outlined fields' floating labels sit above their border; overflow would clip them without this room */}
+                <Box sx={{ flexGrow: 1, overflowY: 'auto', px: 1, pt: 1.5 }}>
                   <Grid container spacing={3} alignItems="center">
-                    <Grid size={{ xs: 12, md: 4 }}>
+                    <Grid size={{ xs: 12, md: 6 }}>
                       {renderAutocomplete(0, 'Employee ID', 'eid')}
                     </Grid>
-                    <Grid size={{ xs: 12, md: 4 }}>
+                    <Grid size={{ xs: 12, md: 6 }}>
                       {renderAutocomplete(0, 'Search by Name', 'name')}
-                    </Grid>
-                    <Grid size={{ xs: 12, md: 4 }}>
-                      {renderAutocomplete(0, 'Select Panel (Role)', 'role')}
                     </Grid>
 
                     <Grid size={{ xs: 12 }}>
@@ -230,119 +239,84 @@ export default function RoleManagementPage() {
                             <Typography><strong>Name:</strong> {empValues.name}</Typography>
                             <Typography><strong>Department:</strong> {empValues.dep}</Typography>
                             <Typography><strong>Mobile:</strong> {empValues.mobile}</Typography>
-                          </  >
+                          </>
                         ) : (
-                          <Box display="flex" height="100%" alignItems="center" justifyContent="center">
+                          <Box display="flex" minHeight="133px" alignItems="center" justifyContent="center">
                             <Typography align="center" color="text.secondary">No Employee Selected</Typography>
                           </Box>
                         )}
                       </Box>
                     </Grid>
+
+                    {/* Role picker sits below the selected employee's details */}
+                    <Grid size={{ xs: 12 }}>
+                      {renderAutocomplete(0, 'Select Role', 'role')}
+                    </Grid>
                   </Grid>
                 </Box>
 
-                {/* Bottom Anchored Button */}
-                <Box sx={{ mt: 'auto', pt: 2 }}>
-                  <Divider sx={{ mb: 2 }} />
-                  <Button type="submit" variant="contained" color="primary" fullWidth size="large">
-                    Grant Access
-                  </Button>
-                </Box>
+                <CardActionButton type="submit">Grant Access</CardActionButton>
               </form>
             )}
 
             {/* TAB 2: View Roles Table */}
             {value === 1 && (
               <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <Box sx={{ mb: 1 }}>
-                  <Grid container spacing={2}>
-                    <Grid size={{ xs: 12, md: 6 }}>
-                      <Autocomplete
-                        options={panel}
-                        onChange={(event, newValue) => handleSearch(newValue, null, 1)}
-                        renderInput={(params) => (
-                          <TextField {...params} label="Filter By Panel" margin="normal" variant="outlined" size="small" />
-                        )}
-                      />
-                    </Grid>
-                  </Grid>
-                </Box>
-
-                <TableContainer sx={{ flexGrow: 1, overflowY: 'auto' }}>
-                  <Table size="small" stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ backgroundColor: 'primary.main', color: 'white', fontWeight: 'bold' }}>Name</TableCell>
-                        <TableCell sx={{ backgroundColor: 'primary.main', color: 'white', fontWeight: 'bold' }}>Panel (Role)</TableCell>
-                        <TableCell sx={{ backgroundColor: 'primary.main', color: 'white', fontWeight: 'bold' }}>Mobile</TableCell>
-                        <TableCell sx={{ backgroundColor: 'primary.main', color: 'white', fontWeight: 'bold' }}>Email</TableCell>
-                        <TableCell sx={{ backgroundColor: 'primary.main', color: 'white', fontWeight: 'bold' }}>Department</TableCell>
-                        <TableCell sx={{ backgroundColor: 'primary.main', color: 'white', fontWeight: 'bold', textAlign: 'center' }}>Action</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {(filtered.length ? filtered : loginEmp)
-                        .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                        .map((e, index) => (
-                          <TableRow key={index} hover>
-                            <TableCell>{e.name}</TableCell>
-                            <TableCell>
-                              <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'secondary.main' }}>
-                                {e.role}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>{e.mobile}</TableCell>
-                            <TableCell>{e.email}</TableCell>
-                            <TableCell>{e.dep}</TableCell>
-                            <TableCell align="center">
-                              <Button
-                                onClick={() => deleteT(e.eid, e.name, e.role)}
-                                variant="outlined"
-                                color="error"
-                                size="small"
-                              >
-                                Revoke
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-
-                      {loginEmp.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
-                            <Typography color="text.secondary">No roles currently assigned.</Typography>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-
-                {/* Bottom Anchored Pagination */}
-                <Box sx={{ mt: 'auto', pt: 1 }}>
-                  <Divider />
-                  <TablePagination
-                    rowsPerPageOptions={rowsPerPageOptions}
-                    component="div"
-                    count={filtered.length ? filtered.length : loginEmp.length}
-                    rowsPerPage={rowsPerPage}
-                    page={page}
-                    onPageChange={(e, newPage) => setPage(newPage)}
-                    onRowsPerPageChange={(e) => {
-                      setRowsPerPage(parseInt(e.target.value, 10));
-                      setPage(0);
-                    }}
+                <Box sx={{ mb: 2, pt: 1.5, maxWidth: 320 }}>
+                  <Autocomplete
+                    options={panel}
+                    onChange={(event, newValue) => handleSearch(newValue, null, 1)}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Filter By Role" margin="none" variant="outlined" size="small" />
+                    )}
                   />
                 </Box>
+
+                <DataTable
+                  columns={COLUMNS}
+                  rows={rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)}
+                  getRowKey={(e) => e.eid}
+                  emptyMessage="No records available."
+                  actionsLabel="Action"
+                  fillHeight
+                  renderActions={(e) => (
+                    <Button
+                      onClick={() => setRevokeTarget({ id: e.eid, name: e.name, role: e.role })}
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                    >
+                      Revoke
+                    </Button>
+                  )}
+                  pagination={{
+                    count: rows.length,
+                    page,
+                    rowsPerPage,
+                    rowsPerPageOptions,
+                    onPageChange: (e, newPage) => setPage(newPage),
+                    onRowsPerPageChange: (e) => {
+                      setRowsPerPage(parseInt(e.target.value, 10));
+                      setPage(0);
+                    },
+                  }}
+                />
               </Box>
             )}
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={revokeTarget !== null}
+        message={`Are you sure you want to revoke the ${revokeTarget?.role ?? ''} role for ${revokeTarget?.name ?? ''}?`}
+        onConfirm={confirmRevoke}
+        onCancel={() => setRevokeTarget(null)}
+      />
     </Box>
   );
 }
 
 // NEXT.JS SECURITY GATE
 RoleManagementPage.layout = 'dashboard';
-RoleManagementPage.allowedRoles = ['admin'];
+RoleManagementPage.requiredPermissions = PAGE_ACCESS.manageRoles;

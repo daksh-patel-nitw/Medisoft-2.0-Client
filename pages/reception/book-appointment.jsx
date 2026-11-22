@@ -1,137 +1,46 @@
 import React, { useState } from 'react';
-import Grid from '@mui/material/Grid2';
-import { 
-  Card, 
-  CardContent, 
-  Button, 
-  Typography, 
-  Box 
-} from '@mui/material';
-import { toast } from 'react-toastify';
+import { Card, CardContent, Box, Button, Typography } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import PatientFinder from '../../components/PatientFinder';
+import AppointmentBooking from '../../components/AppointmentBooking';
+import { PAGE_ACCESS } from '../../utils/pageAccess';
 
-// Import your refactored components!
-import { PatientAutocomplete } from '../../components/patientAutoComp';
-import BookOPDAppointment from '../../components/BookOPDAppointment';
-
+// Step 1: find the patient (shared three-box finder) -> Next
+// Step 2: the shared booking flow - select doctor, select date, pick a time, book
 export default function BookAppointmentPage() {
-  // Global form state passed down to components
   const [patient, setPatient] = useState(null);
-  const [part, setPart] = useState(0);
-
-  const handleNext = () => {
-    if (!patient) {
-      toast.error("Please select a Patient first.");
-      return;
-    }
-    
-    // Prevent double-booking
-    if (patient.opd) {
-      toast.warn(
-        <div>
-          Already booked an appointment with<br />
-          <strong>Dr. {patient.opd}</strong>
-        </div>
-      );
-      return;
-    }
-    
-    // Move to the Doctor Selection step
-    setPart((prev) => (prev + 1) % 3);
-  };
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', mt: 2 }}>
-      <Typography variant="h4" fontWeight="bold" gutterBottom>
-        OPD Appointment Booking
-      </Typography>
-
-      {/* STEP 1: PATIENT SELECTION */}
-      {part === 0 ? (
-        <Grid container justifyContent="center" spacing={2} sx={{ mt: 3 }}>
-          <Card sx={{ position: "relative", width: { md: "50%", xs: "100%" }, minHeight: "65vh", boxShadow: 3 }}>
-            <CardContent sx={{ pb: 10 }}>
-              
-              <Typography variant="h5" fontWeight="bold" gutterBottom>
-                Step 1: Patient Details
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Search for an existing patient by Name, ID, or Mobile number.
-              </Typography>
-
-              <Grid container spacing={3}>
-                <Grid size={{ xs: 12 }}>
-                  <PatientAutocomplete
-                    index={1} // Search by Name
-                    setPatient={setPatient}
-                    patient={patient}
-                    opd={1} // Assuming 1 flags this as an OPD search in your backend
-                  />
-                </Grid>
-
-                <Grid size={{ xs: 12 }}>
-                  <PatientAutocomplete
-                    index={2} // Search by ID
-                    setPatient={setPatient}
-                    patient={patient}
-                    opd={1}
-                  />
-                </Grid>
-
-                <Grid size={{ xs: 12 }}>
-                  <PatientAutocomplete
-                    index={3} // Search by Mobile
-                    setPatient={setPatient}
-                    patient={patient}
-                    opd={1}
-                  />
-                </Grid>
-              </Grid>
-            </CardContent>
-
-            {/* ACTION BUTTONS (BOTTOM FIXED to match OtherParts) */}
-            <Grid 
-              container 
-              spacing={2} 
-              sx={{ 
-                position: "absolute", 
-                bottom: 0, 
-                left: 0, 
-                right: 0, 
-                p: 2, 
-                bgcolor: 'background.paper', 
-                borderTop: '1px solid #e0e0e0' 
-              }}
-            >
-              <Grid size={{ xs: 12 }}>
-                <Button 
-                  variant="contained" 
-                  fullWidth 
-                  color="primary" 
-                  onClick={handleNext}
-                  sx={{ height: "6vh", fontWeight: "bold", fontSize: "1.1rem" }}
-                >
-                  Next
+    <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', height: '100%' }}>
+      <Card sx={{ width: '100%', maxWidth: 800, boxShadow: 3, height: '100%', minHeight: 420, display: 'flex', flexDirection: 'column' }}>
+        <CardContent sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pb: '16px !important' }}>
+          {patient ? (
+            <>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                <Box>
+                  <Typography variant="h6" fontWeight="bold">
+                    {patient.pname}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {patient.pid} · {patient.mobile}
+                  </Typography>
+                </Box>
+                <Button startIcon={<ArrowBackIcon />} onClick={() => setPatient(null)}>
+                  Change patient
                 </Button>
-              </Grid>
-            </Grid>
-          </Card>
-        </Grid>
-      ) : (
-        /* STEPS 2 & 3: DOCTOR & CALENDAR (Handled by BookOPDAppointment) */
-        <Box sx={{ mt: 3 }}>
-          <BookOPDAppointment
-            part={part}
-            setPart={setPart}
-            patient={patient}
-            setPatient={setPatient}
-            index={1} // Flags BookOPDAppointment to behave as the sub-component
-          />
-        </Box>
-      )}
+              </Box>
+              {/* after a booking, go back to the patient search for the next one */}
+              <AppointmentBooking patientId={patient.pid} onBooked={() => setPatient(null)} />
+            </>
+          ) : (
+            <PatientFinder onNext={setPatient} />
+          )}
+        </CardContent>
+      </Card>
     </Box>
   );
 }
 
 // NEXT.JS SECURITY GATE
 BookAppointmentPage.layout = 'dashboard';
-BookAppointmentPage.allowedRoles = ['admin', 'receptionist'];
+BookAppointmentPage.requiredPermissions = PAGE_ACCESS.receptionBookAppointment;

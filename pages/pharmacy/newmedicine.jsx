@@ -1,226 +1,261 @@
-import React, { useState, useEffect, memo } from "react";
-import { Grid2, Card, CardContent, TextField, Autocomplete, Button, Typography, Box } from "@mui/material";
-import { toast } from "react-toastify";
-import { apis } from "../../services/commonServices"; 
-import { initialMedicineState, checkNewMedicine, arr1, arr2 } from '../../utils/pharmacyUtils'; 
+import React, { useState, useEffect, useMemo } from 'react';
+import Grid from '@mui/material/Grid2';
+import {
+  Card,
+  CardContent,
+  Tabs,
+  Tab,
+  TextField,
+  MenuItem,
+  Button,
+  Typography,
+  Box,
+  Chip,
+  Divider,
+  Skeleton
+} from '@mui/material';
+import { apis } from '../../services/commonServices';
+import useRefreshStore from '../../store/useRefreshStore';
+import { decodeToFlags } from '../../utils/permissions.util';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import CardActionButton from '../../components/CardActionButton';
+import MedicineForm, { EMPTY_MEDICINE, validateMedicine, toMedicinePayload } from '../../components/MedicineForm';
+import { PAGE_ACCESS } from '../../utils/pageAccess';
+
+// Same rule the API enforces for a category name (letters, digits, spaces).
+const CATEGORY_PATTERN = /^[\p{L}\p{M}\p{N}\s]+$/u;
 
 // ==========================================
-// COMPONENT 1: The Category/Type Manager (Memoized)
+// TAB 1: add a medicine
 // ==========================================
-const CategoryForm = memo(({ typeValues, updateValues }) => {
-  const [category, setType] = useState('');
-  const [categoryDelete, setDeleteType] = useState('');
+function MedicineTab({ categories, onAdd }) {
+  const [values, setValues] = useState(EMPTY_MEDICINE);
+  const [errors, setErrors] = useState({});
 
-  const handleInputChange = (event, newValue) => {
-    const { value, name } = event.target;
-    name === 'category' ? setType(value) : setDeleteType(newValue);
-  };
-
-  const handleSubmit = async (flag) => {
-    if (flag && !category) {
-      toast.error("Please enter a category");
-      return;
-    }
-    const updated = flag ? [category, ...typeValues] : typeValues.filter(type => type !== categoryDelete);
-    const data = { value: flag ? category : categoryDelete, flag };
-    
-    const status = await apis.noTokenStatusPostRequest('/pharmacy/types', data);
-    if (status === 200) {
-      flag ? setType('') : setDeleteType('');
-      updateValues(updated);
-    }
-  };
-
-  return (
-    <Grid2 container spacing={2} size={{ xs: 12 }}>
-      {/* Add Category Card */}
-      <Card sx={{ width: '100%', mb: 2 }}>
-        <CardContent>
-          <Grid2 container spacing={2} alignItems="center">
-            <Grid2 size={{ xs: 12 }}>
-              <Typography variant="h6">Add Medicine Category</Typography>
-            </Grid2>
-            <Grid2 size={{ xs: 12, sm: 8 }}>
-              <TextField
-                name="category"
-                label="New Category Name"
-                value={category}
-                onChange={handleInputChange}
-                fullWidth
-                variant="outlined"
-                size="small"
-              />
-            </Grid2>
-            <Grid2 size={{ xs: 12, sm: 4 }}>
-              <Button onClick={() => handleSubmit(1)} variant="contained" color="primary" fullWidth>
-                Add Category
-              </Button>
-            </Grid2>
-          </Grid2>
-        </CardContent>
-      </Card>
-
-      {/* Delete Category Card */}
-      <Card sx={{ width: '100%' }}>
-        <CardContent>
-          <Grid2 container spacing={2} alignItems="center">
-            <Grid2 size={{ xs: 12 }}>
-              <Typography variant="h6">Delete Medicine Category</Typography>
-            </Grid2>
-            <Grid2 size={{ xs: 12, sm: 8 }}>
-              <Autocomplete
-                options={Array.isArray(typeValues) ? typeValues : []}
-                name="categoryDelete"
-                onChange={(event, newValue) => handleInputChange(event, newValue)}
-                value={categoryDelete}
-                size="small"
-                renderInput={(params) => <TextField fullWidth {...params} label="Search Category" />}
-              />
-            </Grid2>
-            <Grid2 size={{ xs: 12, sm: 4 }}>
-              <Button 
-                onClick={() => handleSubmit(0)} 
-                variant="contained" 
-                color="error" 
-                fullWidth 
-                disabled={!categoryDelete}
-              >
-                Delete
-              </Button>
-            </Grid2>
-          </Grid2>
-        </CardContent>
-      </Card>
-    </Grid2>
-  );
-});
-
-// ==========================================
-// COMPONENT 2: The Main Add Medicine Form (Memoized)
-// ==========================================
-const AddMedicineForm = memo(({ formValues, handleInputChange, handleSubmit, allCategory, searchValue, searchVal }) => {
-  return (
-    <Card>
-      <CardContent>
-        <form onSubmit={handleSubmit} autoComplete="off">
-          <Grid2 container spacing={2}>
-            <Grid2 size={{ xs: 12 }}>
-              <Typography variant="h6">Add New Medicine</Typography>
-            </Grid2>
-            
-            {arr1.map((fieldName, index) => (
-              index === 2 ? (
-                <Grid2 size={{ xs: 12 }} key={fieldName}>
-                  <Autocomplete
-                    options={allCategory}
-                    onChange={(event, newValue) => searchValue(newValue)}
-                    value={searchVal}
-                    size="small"
-                    renderInput={(params) => <TextField fullWidth {...params} label="Select Category Type" />}
-                  />
-                </Grid2>
-              ) : (
-                <Grid2 size={{ xs: [5].includes(index) ? 12 : 6 }} key={fieldName}>
-                  <TextField
-                    fullWidth
-                    variant="outlined"
-                    size="small"
-                    name={fieldName}
-                    label={arr2[index]}
-                    type={[3, 4, 5].includes(index) ? "number" : "text"}
-                    value={formValues[fieldName]}
-                    onChange={handleInputChange}
-                  />
-                </Grid2>
-              )
-            ))}
-            
-            <Grid2 size={{ xs: 12 }}>
-              <Button type="submit" variant="contained" color="success" fullWidth sx={{ mt: 2 }}>
-                Save Medicine to Inventory
-              </Button>
-            </Grid2>
-          </Grid2>
-        </form>
-      </CardContent>
-    </Card>
-  );
-});
-
-// ==========================================
-// COMPONENT 3: The Main Page Export
-// ==========================================
-export default function NewMedicinePage() {
-  const [formValues, setFormValues] = useState(initialMedicineState);
-  const [allCategory, setCategory] = useState([]);
-  const [searchVal, setSearchVal] = useState('');
-
-  const handleInputChange = (event) => {
-    const { name, value } = event.target;
-    setFormValues(prev => ({ ...prev, [name]: value }));
-  };
-
-  const searchValue = (newValue) => {
-    setSearchVal(newValue);
-    setFormValues(prev => ({ ...prev, t: newValue }));
-  };
-
-  // useEffect(() => {
-  //   const fetchData = async () => {
-  //     try {
-  //       const data = await apis.noTokengetRequest('/pharmacy/types');
-  //       setCategory(data);
-  //     } catch (error) {
-  //       console.log(error);
-  //     }
-  //   };
-  //   fetchData();
-  // }, []);
-
-  const handleSubmit = async (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-    if (checkNewMedicine(formValues)) {
+    const found = validateMedicine(values);
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
+
+    const ok = await onAdd(toMedicinePayload(values));
+    if (ok) setValues(EMPTY_MEDICINE);
+  };
+
+  return (
+    <form onSubmit={submit} autoComplete="off" noValidate style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
+      {/* pt: room for the outlined field's floating label */}
+      <Box sx={{ pt: 1 }}>
+        <MedicineForm
+          values={values}
+          onChange={(next) => {
+            setValues(next);
+            setErrors({});
+          }}
+          categories={categories}
+          errors={errors}
+        />
+      </Box>
+      <CardActionButton type="submit">Add medicine</CardActionButton>
+    </form>
+  );
+}
+
+// ==========================================
+// TAB 2: categories - the add form on top, the existing ones as small chips below
+// ==========================================
+function CategoryTab({ categories, canManage, onAdd, onDelete }) {
+  const [name, setName] = useState('');
+  const [freeQuantity, setFreeQuantity] = useState('Y');
+
+  const trimmed = name.trim();
+  const isValid = trimmed.length > 0 && CATEGORY_PATTERN.test(trimmed);
+  const showError = name.length > 0 && !isValid;
+
+  const submit = async () => {
+    if (!isValid) return;
+    const ok = await onAdd({ category: trimmed, freeQuantity });
+    if (ok) setName('');
+  };
+
+  return (
+    <>
+      {canManage && (
+        <>
+          <Grid container spacing={2} alignItems="flex-start" sx={{ pt: 1 }}>
+            <Grid size={{ xs: 12 }}>
+              <TextField
+                fullWidth
+                size="small"
+                label="New category name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && submit()}
+                error={showError}
+                helperText={showError ? 'Letters, numbers and spaces only' : ' '}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 7 }}>
+              <TextField
+                select
+                fullWidth
+                size="small"
+                label="Sold in loose pieces?"
+                value={freeQuantity}
+                onChange={(e) => setFreeQuantity(e.target.value)}
+              >
+                <MenuItem value="Y">Yes - e.g. tablets</MenuItem>
+                <MenuItem value="N">No - full packs only</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 5 }}>
+              <Button fullWidth variant="contained" color="primary" onClick={submit} disabled={!isValid} sx={{ height: 40 }}>
+                Add category
+              </Button>
+            </Grid>
+          </Grid>
+          <Divider sx={{ my: 2 }} />
+        </>
+      )}
+
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, minHeight: 32 }}>
+        {categories.map((c) => (
+          <Chip
+            key={c._id}
+            size="small"
+            label={c.name}
+            // Hover shows what the Y/N flag means for this category.
+            title={c.freeQuantity === 'Y' ? 'Can be sold in loose pieces' : 'Sold in full packs only'}
+            variant={c.freeQuantity === 'Y' ? 'filled' : 'outlined'}
+            color="primary"
+            onDelete={canManage ? () => onDelete(c) : undefined}
+          />
+        ))}
+        {categories.length === 0 && (
+          <Typography variant="body2" color="text.secondary">
+            No categories yet.
+          </Typography>
+        )}
+      </Box>
+    </>
+  );
+}
+
+// ==========================================
+// MAIN PAGE COMPONENT
+// ==========================================
+export default function NewMedicinePage({ currentUser }) {
+  const [tab, setTab] = useState('medicine');
+  const [categories, setCategories] = useState(null); // null = still loading
+  const [reloadKey, setReloadKey] = useState(0);
+  const [categoryToDelete, setCategoryToDelete] = useState(null);
+
+  const refreshTick = useRefreshStore((state) => state.refreshTick);
+  const finishRefresh = useRefreshStore((state) => state.finishRefresh);
+
+  // Decoded once per currentUser change, reused for every show/hide check.
+  const flags = useMemo(() => decodeToFlags(currentUser?.permissions), [currentUser?.permissions]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
       try {
-        await apis.noTokenPostRequest('/pharmacy', formValues);
-        setFormValues(initialMedicineState);
-        setSearchVal('');
+        const data = await apis.getRequest('/pharmacy/types');
+        if (!cancelled) setCategories(data || []);
       } catch (error) {
-        console.error(error);
+        if (!cancelled) setCategories([]);
+      } finally {
+        finishRefresh();
       }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshTick, reloadKey]);
+
+  // Each handler resolves true on success (so the form can clear) and false on
+  // a server rejection - which the http client has already toasted.
+  const addCategory = async (body) => {
+    try {
+      await apis.postRequest('/pharmacy/types', body);
+      setReloadKey((k) => k + 1);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  const confirmDeleteCategory = async () => {
+    const { _id } = categoryToDelete;
+    setCategoryToDelete(null);
+    try {
+      await apis.deleteRequest(`/pharmacy/types?id=${encodeURIComponent(_id)}`);
+      setReloadKey((k) => k + 1);
+    } catch (error) {
+      // Already toasted by the http client.
+    }
+  };
+
+  const addMedicine = async (payload) => {
+    try {
+      await apis.postRequest('/pharmacy', payload);
+      return true;
+    } catch (error) {
+      return false;
     }
   };
 
   return (
-    <Box>
-      <Typography variant="h4" fontWeight="bold" gutterBottom>
-        Pharmacy Inventory Management
-      </Typography>
-      
-      <Grid2 container spacing={4} sx={{ mt: 2 }}>
-        {/* Left Side: Add Medicine */}
-        <Grid2 size={{ xs: 12, md: 7 }}>
-          <AddMedicineForm
-            formValues={formValues}
-            handleInputChange={handleInputChange}
-            handleSubmit={handleSubmit}
-            allCategory={allCategory}
-            searchValue={searchValue}
-            searchVal={searchVal}
-          />
-        </Grid2>
+    // One card, centered horizontally; the tabs name the two sections.
+    <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%', height: '100%' }}>
+      <Card sx={{ width: '100%', maxWidth: 800, boxShadow: 3, height: '100%', minHeight: 520, display: 'flex', flexDirection: 'column' }}>
+        {categories === null ? (
+          <>
+            <Skeleton variant="rectangular" height={48} />
+            <CardContent>
+              <Skeleton variant="rectangular" height={260} sx={{ borderRadius: 1 }} />
+            </CardContent>
+          </>
+        ) : (
+          <>
+            <Tabs
+              value={tab}
+              indicatorColor="primary"
+              textColor="primary"
+              onChange={(e, next) => setTab(next)}
+              variant="fullWidth"
+              sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 48 }}
+            >
+              <Tab value="medicine" label="Medicine" />
+              <Tab value="category" label="Medicine Category" />
+            </Tabs>
 
-        {/* Right Side: Manage Categories */}
-        <Grid2 size={{ xs: 12, md: 5 }}>
-          <CategoryForm 
-            typeValues={allCategory} 
-            updateValues={setCategory} 
-          />
-        </Grid2>
-      </Grid2>
+            <CardContent sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+              {tab === 'medicine' && <MedicineTab categories={categories} onAdd={addMedicine} />}
+              {tab === 'category' && (
+                <CategoryTab
+                  categories={categories}
+                  canManage={flags.has('manageMedicineCategories')}
+                  onAdd={addCategory}
+                  onDelete={setCategoryToDelete}
+                />
+              )}
+            </CardContent>
+          </>
+        )}
+      </Card>
+
+      <ConfirmDialog
+        open={categoryToDelete !== null}
+        message={`Delete the category "${categoryToDelete?.name ?? ''}"?`}
+        onConfirm={confirmDeleteCategory}
+        onCancel={() => setCategoryToDelete(null)}
+      />
     </Box>
   );
 }
 
 // Next.js Security & Layout Flags
 NewMedicinePage.layout = 'dashboard';
-NewMedicinePage.allowedRoles = ['admin', 'pharmacist'];
+NewMedicinePage.requiredPermissions = PAGE_ACCESS.pharmacyNewMedicine;
