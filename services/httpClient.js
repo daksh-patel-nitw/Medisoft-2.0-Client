@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { toast } from "react-toastify";
 import useApiLoadingStore from "../store/useApiLoadingStore";
+import { apiBase } from "./apiBase";
 
-const baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const baseURL = apiBase();
 
 // ==========================================
 // REUSABLE INTERCEPTOR LOGIC

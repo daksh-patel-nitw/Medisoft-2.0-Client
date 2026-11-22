@@ -8,10 +8,11 @@ import axios from 'axios';
 import { hasAccess } from '../utils/permissions.util';
 import GlobalProgress from '../components/GlobalProgress';
 import AppFooter from '../components/AppFooter';
+import { apiBase } from '../services/apiBase';
 
 // GET /users/currentuser with whatever cookies the caller can send.
 const fetchCurrentUser = async (headers = {}) => {
-  const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/users/currentuser`, { headers, withCredentials: true });
+  const response = await axios.get(`${apiBase()}/users/currentuser`, { headers, withCredentials: true });
   return response?.data?.data ?? null;
 };
 
@@ -55,8 +56,7 @@ const AppComponent = ({ Component, pageProps, currentUser: serverUser, authPendi
   // raw axios call, not the shared `apis` client - a failed ping (expected
   // mid-wake-up) must stay silent, not surface the usual network-error toast.
   useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-    axios.get(`${apiUrl}/public/ping`).catch(() => {});
+    axios.get(`${apiBase()}/public/ping`).catch(() => {});
   }, []);
 
   if (authPending && !browserUser) {
