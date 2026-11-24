@@ -1,21 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, Box, Chip, IconButton, Tooltip, TextField, MenuItem } from '@mui/material';
+import { Card, CardContent, Box, Chip, IconButton, Tooltip, TextField, MenuItem, Autocomplete } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { apis } from '../../services/commonServices';
 import useRefreshStore from '../../store/useRefreshStore';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import DataTable from '../../components/DataTable';
-import SearchField from '../../components/SearchField';
+import useRoomDepartmentsStore from '../../store/useRoomDepartmentsStore';
 import RoomEditDialog from '../../components/RoomEditDialog';
 import { ROOM_STATUSES } from '../../components/RoomForm';
 import { PAGE_ACCESS } from '../../utils/pageAccess';
 
 const ROWS_PER_PAGE_OPTIONS = [10, 20];
-// The department filter takes letters (and spaces); anything else would be rejected by the API.
-const DEPARTMENT_FILTER = /^[\p{L}\p{M}\s'-]*$/u;
-const FILTER_DEBOUNCE_MS = 400;
-
 const statusLabel = (value) => ROOM_STATUSES.find((s) => s.value === value)?.label ?? value;
 
 const COLUMNS = [
@@ -34,8 +30,8 @@ const COLUMNS = [
 export default function RoomsPage() {
   const [categories, setCategories] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState(''); // '' = every category
-  const [departmentText, setDepartmentText] = useState('');
-  const [department, setDepartment] = useState(''); // the debounced, validated text actually sent
+  const [department, setDepartment] = useState(''); // '' = every department
+  const { departments, load: loadDepartments } = useRoomDepartmentsStore();
   const [page, setPage] = useState(0); // 0-based for the table; the API is 1-based
   const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE_OPTIONS[0]);
   const [reloadKey, setReloadKey] = useState(0);
@@ -46,17 +42,9 @@ export default function RoomsPage() {
   const refreshTick = useRefreshStore((state) => state.refreshTick);
   const finishRefresh = useRefreshStore((state) => state.finishRefresh);
 
-  const departmentError = !DEPARTMENT_FILTER.test(departmentText);
-
-  // Debounce typing in the department filter; invalid text is never sent.
   useEffect(() => {
-    if (departmentError) return undefined;
-    const timer = setTimeout(() => {
-      setDepartment(departmentText.trim());
-      setPage(0);
-    }, FILTER_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [departmentText, departmentError]);
+    loadDepartments();
+  }, [loadDepartments]);
 
   // Categories for the filter and the edit dialog.
   useEffect(() => {
@@ -131,13 +119,18 @@ export default function RoomsPage() {
         <CardContent sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pb: '16px !important' }}>
           {/* filters; pt: room for the floating labels */}
           <Box sx={{ pt: 1, mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <SearchField
-              fullWidth={false}
-              label="Filter by department"
-              value={departmentText}
-              onChange={setDepartmentText}
-              error={departmentError}
-              helperText={departmentError ? 'Letters only' : undefined}
+            {/* a dropdown of the hospital's departments - type to narrow it, pick one to filter */}
+            <Autocomplete
+              size="small"
+              options={departments}
+              value={department || null}
+              onChange={(e, next) => {
+                setDepartment(next || '');
+                setPage(0);
+              }}
+              noOptionsText="No matching department"
+              getOptionLabel={(d) => d.charAt(0).toUpperCase() + d.slice(1)}
+              renderInput={(params) => <TextField {...params} label="Filter by department" />}
               sx={{ width: { xs: '100%', sm: 260 } }}
             />
             <TextField
@@ -198,7 +191,7 @@ export default function RoomsPage() {
       </Card>
 
       {/* Mounted only while editing so the form always starts from that room. */}
-      {editing && <RoomEditDialog key={editing.id} room={editing} categories={categories} onSave={saveEdit} onCancel={() => setEditing(null)} />}
+      {editing && <RoomEditDialog key={editing.id} room={editing} categories={categories} departments={departments} onSave={saveEdit} onCancel={() => setEditing(null)} />}
 
       <ConfirmDialog
         open={toDelete !== null}

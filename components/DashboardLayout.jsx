@@ -2,7 +2,7 @@ import * as React from 'react';
 import { styled, ThemeProvider, useTheme } from '@mui/material/styles';
 import { useRouter } from 'next/router';
 import useDrawerStore from '../store/useDrawerStore';
-import { getSidebarMenu, SIDEBAR_GROUPS } from '../utils/sidebarConfig';
+import { getSidebarMenu, getStandaloneMenu, SIDEBAR_GROUPS } from '../utils/sidebarConfig';
 import { createAppTheme, getThemeKeyForRole } from '../utils/themes.util';
 import {
   Box, Drawer as MuiDrawer, AppBar as MuiAppBar, Toolbar, List, CssBaseline,
@@ -148,6 +148,10 @@ export default function DashboardLayout({ children, currentUser }) {
   const refreshPage = () => {
     triggerRefresh();
   };
+  const finishRefresh = useRefreshStore((state) => state.finishRefresh);
+  React.useEffect(() => {
+    finishRefresh();
+  }, [router.pathname, finishRefresh]);
 
   // ==========================================
   // 4. LOGOUT LOGIC
@@ -161,6 +165,31 @@ export default function DashboardLayout({ children, currentUser }) {
   // The phone's slide-out menu always shows labels; only the desktop drawer has an icon-only (closed) state.
   const showLabels = isSmallScreen || isOpen;
 
+  // With only ONE main menu there is nothing to group: its pages are listed directly. With several,
+  // each main menu is a dropdown holding its pages.
+  const flatItems = menuGroups.length === 1 ? menuGroups[0].children : null;
+
+  // One page listed directly in the menu (no dropdown): the only main menu's pages, and the standalone entries.
+  const directItem = (item) => {
+    const ItemIcon = Icons[item.icon] || Icons.HelpOutline;
+    return (
+      <ListItem key={item.path} disablePadding sx={{ display: 'block' }}>
+        <Tooltip title={showLabels ? '' : item.label} placement="right">
+          <ListItemButton
+            selected={router.pathname === item.path}
+            sx={{ minHeight: 48, justifyContent: showLabels ? 'initial' : 'center', px: 2.5 }}
+            onClick={() => handleListItemClick(item.path)}
+          >
+            <ListItemIcon sx={{ minWidth: 0, mr: showLabels ? 3 : 'auto', justifyContent: 'center' }}>
+              <ItemIcon color="primary" />
+            </ListItemIcon>
+            <ListItemText primary={item.label} sx={{ opacity: showLabels ? 1 : 0 }} />
+          </ListItemButton>
+        </Tooltip>
+      </ListItem>
+    );
+  };
+
   const drawerContent = (
     <>
       <DrawerHeader>
@@ -170,7 +199,7 @@ export default function DashboardLayout({ children, currentUser }) {
       </DrawerHeader>
       <Divider />
       <List>
-        {menuGroups.map((group) => {
+        {flatItems ? flatItems.map(directItem) : menuGroups.map((group) => {
           const GroupIcon = Icons[group.icon] || Icons.HelpOutline;
           const expanded = isGroupExpanded(group);
           return (
@@ -213,6 +242,8 @@ export default function DashboardLayout({ children, currentUser }) {
             </React.Fragment>
           );
         })}
+
+        {getStandaloneMenu(currentUser?.permissions).map(directItem)}
       </List>
     </>
   );

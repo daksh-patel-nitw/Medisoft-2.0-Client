@@ -72,6 +72,7 @@ export default function RoleManagementPage() {
   const [emp, setEmp] = useState([]);
   const [loginEmp, setLoginEmp] = useState([]);
   const [panel, setPanel] = useState([]);
+  const [departments, setDepartments] = useState([]); // for the department dropdown that goes with the role
 
   const [isLoading, setIsLoading] = useState(true);
   const [value, setValue] = useState(0);
@@ -97,6 +98,7 @@ export default function RoleManagementPage() {
       setEmp(data.availableEmployees || []);
       setLoginEmp(data.assignedEmployees || []);
       setPanel(data.roles || []);
+      setDepartments(data.departments || []);
     } catch (error) {
       console.error("Failed to fetch roles data");
     } finally {
@@ -115,7 +117,7 @@ export default function RoleManagementPage() {
         if (name === 'eid' || name === 'name') {
           const t = emp.find((e) => e[name] === newValue);
           if (t) {
-            setEmpValues({ ...empValues, mobile: t.mobile, eid: t.eid, name: t.name, dep: t.dep });
+            setEmpValues({ ...empValues, mobile: t.mobile, eid: t.eid, name: t.name, dep: t.dep || '' });
           }
         } else {
           setEmpValues({ ...empValues, role: newValue });
@@ -143,15 +145,20 @@ export default function RoleManagementPage() {
       toast.error('Please select a Role');
       return;
     }
+    if (!empValues.dep) {
+      toast.error('Please select a Department');
+      return;
+    }
     try {
       await apis.patchRequest('/admin/employees', {
         eid: empValues.eid,
-        role: empValues.role
+        role: empValues.role,
+        dep: empValues.dep
       });
 
       const employeeData = emp.find(e => e.eid === empValues.eid);
       if (employeeData) {
-        setLoginEmp([{ ...employeeData, role: empValues.role }, ...loginEmp]);
+        setLoginEmp([{ ...employeeData, role: empValues.role, dep: empValues.dep }, ...loginEmp]);
         setEmp(emp.filter((e) => e.eid !== empValues.eid));
       }
 
@@ -237,7 +244,6 @@ export default function RoleManagementPage() {
                             <Divider sx={{ mb: 1 }} />
                             <Typography><strong>ID:</strong> {empValues.eid}</Typography>
                             <Typography><strong>Name:</strong> {empValues.name}</Typography>
-                            <Typography><strong>Department:</strong> {empValues.dep}</Typography>
                             <Typography><strong>Mobile:</strong> {empValues.mobile}</Typography>
                           </>
                         ) : (
@@ -248,9 +254,21 @@ export default function RoleManagementPage() {
                       </Box>
                     </Grid>
 
-                    {/* Role picker sits below the selected employee's details */}
+                    {/* Role picker sits below the selected employee's details, with the department they will work in */}
                     <Grid size={{ xs: 12 }}>
                       {renderAutocomplete(0, 'Select Role', 'role')}
+                    </Grid>
+                    <Grid size={{ xs: 12 }}>
+                      <Autocomplete
+                        options={departments}
+                        value={empValues.dep || null}
+                        onChange={(event, newValue) => setEmpValues({ ...empValues, dep: newValue || '' })}
+                        fullWidth
+                        noOptionsText="No departments yet - add one under Admin > Departments"
+                        renderInput={(params) => (
+                          <TextField {...params} label="Select Department" margin="none" variant="outlined" size="small" />
+                        )}
+                      />
                     </Grid>
                   </Grid>
                 </Box>

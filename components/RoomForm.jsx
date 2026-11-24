@@ -31,9 +31,7 @@ export function validateRoom(values) {
   if (!floor) errors.floor = 'Enter the floor (0 for ground)';
   else if (!WHOLE.test(floor)) errors.floor = 'Whole number';
 
-  const department = values.department.trim();
-  if (!department) errors.department = 'Enter the department';
-  else if (!LETTERS.test(department)) errors.department = 'Letters only (no spaces)';
+  if (!values.department) errors.department = 'Select the department';
 
   if (!values.category) errors.category = 'Select a category';
 
@@ -62,10 +60,11 @@ export function toRoomPayload(values) {
  * @param {typeof EMPTY_ROOM & {status?: string}} values
  * @param {(next) => void} onChange
  * @param {{_id: string, name: string, pricePerDay: number}[]} categories
+ * @param {string[]} departments - the hospital's departments (a dropdown; the API refuses any other)
  * @param {boolean} [showStatus] - also show the room's status (used when editing)
  * @param {object} [errors] - from validateRoom
  */
-export default function RoomForm({ values, onChange, categories = [], showStatus = false, errors = {} }) {
+export default function RoomForm({ values, onChange, categories = [], departments = [], showStatus = false, errors = {} }) {
   const set = (field) => (event) => onChange({ ...values, [field]: event.target.value });
   const chosen = categories.find((c) => c._id === values.category);
 
@@ -90,7 +89,13 @@ export default function RoomForm({ values, onChange, categories = [], showStatus
             />
           </Grid>
           <Grid size={{ xs: 12 }}>
-            <TextField fullWidth size="small" label="Department" value={values.department} onChange={set('department')} error={Boolean(errors.department)} helperText={errors.department} />
+            <TextField select fullWidth size="small" label="Department" value={values.department} onChange={set('department')} error={Boolean(errors.department)} helperText={errors.department}>
+              {departments.map((d) => (
+                <MenuItem key={d} value={d} sx={{ textTransform: 'capitalize' }}>
+                  {d}
+                </MenuItem>
+              ))}
+            </TextField>
           </Grid>
           <Grid size={{ xs: 12 }}>
             <TextField select fullWidth size="small" label="Room category" value={values.category} onChange={set('category')} error={Boolean(errors.category)} helperText={errors.category}>

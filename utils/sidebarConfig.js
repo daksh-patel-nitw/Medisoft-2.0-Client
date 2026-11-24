@@ -21,15 +21,6 @@ export const SIDEBAR_GROUPS = [
     ],
   },
   {
-    label: 'My Care',
-    icon: 'Favorite',
-    children: [
-      { label: 'Book Appointment', path: '/patient/book-appointment', icon: 'EventAvailable', access: PAGE_ACCESS.patientBookAppointment },
-      { label: 'My Appointments', path: '/patient/appointments', icon: 'History', access: PAGE_ACCESS.patientAppointments },
-      { label: 'Bills', path: '/patient/bills', icon: 'Receipt', access: PAGE_ACCESS.patientBills },
-    ],
-  },
-  {
     label: 'Billing',
     icon: 'ReceiptLong',
     children: [
@@ -46,6 +37,7 @@ export const SIDEBAR_GROUPS = [
       { label: "Today's Appointments", path: '/reception/appointments', icon: 'MonitorHeart', access: PAGE_ACCESS.receptionAppointments },
       { label: 'Patient Lockouts', path: '/reception/lockouts', icon: 'LockPerson', access: PAGE_ACCESS.receptionLockouts },
       { label: 'Queue Screen', path: '/reception/queue', icon: 'Tv', access: PAGE_ACCESS.receptionQueue },
+      { label: 'Edit Members', path: '/reception/members', icon: 'ManageAccounts', access: PAGE_ACCESS.receptionMembers },
       { label: 'Consultation Bills', path: '/reception/bills', icon: 'Receipt', access: PAGE_ACCESS.receptionBills },
     ],
   },
@@ -55,6 +47,7 @@ export const SIDEBAR_GROUPS = [
     children: [
       { label: 'OPD Patients', path: '/doctor/opd', icon: 'AssistWalker', access: PAGE_ACCESS.doctorOpd },
       { label: 'IPD Patients', path: '/doctor/ipd', icon: 'Hotel', access: PAGE_ACCESS.doctorIpd },
+      { label: 'My Appointments', path: '/doctor/appointments', icon: 'EventNote', access: PAGE_ACCESS.doctorAppointments },
     ],
   },
   {
@@ -91,6 +84,21 @@ export const SIDEBAR_GROUPS = [
   },
 ];
 
+// Pages listed directly in the menu, with no main menu above them, after the main menus. An entry with
+// `access` shows only to a user holding those bits (the patient pages: only patients hold PT); an entry
+// without `access` shows to every registered member (Profile).
+export const SIDEBAR_STANDALONE = [
+  { label: 'Book Appointment', path: '/patient/book-appointment', icon: 'EventAvailable', access: PAGE_ACCESS.patientBookAppointment },
+  { label: 'My Appointments', path: '/patient/appointments', icon: 'History', access: PAGE_ACCESS.patientAppointments },
+  { label: 'Bills', path: '/patient/bills', icon: 'Receipt', access: PAGE_ACCESS.patientBills },
+  { label: 'Profile', path: '/profile', icon: 'AccountCircle' },
+];
+
+/** The direct entries this user may see. */
+export function getStandaloneMenu(permissions) {
+  return SIDEBAR_STANDALONE.filter((item) => !item.access || hasAccess(permissions, item.access));
+}
+
 /**
  * The menu for this user's permissions: each main menu with only the
  * sub-pages they may open, and main menus left with no sub-pages dropped.
@@ -106,7 +114,7 @@ export function getSidebarMenu(permissions) {
     .filter((group) => group.children.length > 0);
 }
 
-/** First page the user can open (top sub-menu of the top main menu), or undefined. */
+/** First page the user can open (top sub-menu of the top main menu, else their first direct entry such as Profile), or undefined. */
 export function getFirstAccessiblePath(permissions) {
-  return getSidebarMenu(permissions)[0]?.children[0]?.path;
+  return getSidebarMenu(permissions)[0]?.children[0]?.path ?? getStandaloneMenu(permissions)[0]?.path;
 }

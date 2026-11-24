@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import { TextField, Card, CardContent, Typography, Box, CircularProgress } from '@mui/material';
+import { TextField, Card, CardContent, Typography, Box, CircularProgress, Autocomplete } from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import { apis } from '../../services/commonServices';
 import CardActionButton from '../../components/CardActionButton';
+import { browserTimeZone } from '../../utils/timeZone';
+
+// every zone the browser knows (falls back to the browser's own zone on very old browsers)
+const TIME_ZONES = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [browserTimeZone()];
 
 // Same rule the server enforces (v_password in the API's commonValidation.ts),
 // checked here first so the user gets the hint before a round trip.
@@ -11,8 +15,9 @@ const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$*])[A-Za-z\d@#$*]
 const PASSWORD_HINT = '8-16 characters with an uppercase letter, a lowercase letter, a digit and one of @ # $ *';
 
 /** Returns { field: message } for every invalid field; empty object means valid. */
-function validateFirstLoginForm({ currentPassword, newPassword, confirmPassword }) {
+function validateFirstLoginForm({ currentPassword, newPassword, confirmPassword, timezone }) {
   const errors = {};
+  if (!timezone) errors.timezone = 'Select your timezone';
   if (!currentPassword) errors.currentPassword = 'Enter your current (temporary) password';
   if (!newPassword) errors.newPassword = 'Enter a new password';
   else if (!PASSWORD_RULE.test(newPassword)) errors.newPassword = PASSWORD_HINT;
@@ -25,7 +30,7 @@ function validateFirstLoginForm({ currentPassword, newPassword, confirmPassword 
 export default function FirstLoginPage() {
   const router = useRouter();
   const [uname, setUname] = useState(null);
-  const [values, setValues] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [values, setValues] = useState({ currentPassword: '', newPassword: '', confirmPassword: '', timezone: browserTimeZone() });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -61,6 +66,7 @@ export default function FirstLoginPage() {
         uname,
         tempPassword: values.currentPassword,
         newPassword: values.newPassword,
+        timezone: values.timezone,
       });
       sessionStorage.removeItem('firstLoginUname');
       router.push('/auth/login');
@@ -138,6 +144,26 @@ export default function FirstLoginPage() {
                   onChange={handleChange}
                   error={Boolean(errors.confirmPassword)}
                   helperText={errors.confirmPassword}
+                />
+              </Grid>
+
+              <Grid size={{ xs: 12 }}>
+                <Autocomplete
+                  options={TIME_ZONES}
+                  value={values.timezone || null}
+                  onChange={(e, next) => {
+                    setValues((prev) => ({ ...prev, timezone: next || '' }));
+                    if (errors.timezone) setErrors((prev) => ({ ...prev, timezone: undefined }));
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Timezone"
+                      error={Boolean(errors.timezone)}
+                      helperText={errors.timezone || 'Chosen from this device - change it if it is wrong'}
+                      slotProps={{ ...params.slotProps, inputLabel: { ...params.slotProps?.inputLabel, shrink: true } }}
+                    />
+                  )}
                 />
               </Grid>
 

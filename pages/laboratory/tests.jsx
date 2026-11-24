@@ -14,7 +14,26 @@ const ROWS_PER_PAGE_OPTIONS = [10, 20];
 const COLUMNS = [
   { key: 'name', label: 'Test name', minWidth: 140 },
   { key: 'price', label: 'Price (₹)', align: 'right', render: (t) => `₹${Number(t.price).toFixed(2)}` },
-  { key: 'pat_details', label: 'Required details' },
+  {
+    key: 'pat_details',
+    label: 'Details to collect',
+    minWidth: 200,
+    render: (t) => (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+        {t.pat_details && (
+          <Typography variant="body2">
+            {t.pat_details} <em>({t.pat_details_mandatory ? 'required' : 'optional'})</em>
+          </Typography>
+        )}
+        {(t.default_details ?? []).map((d) => (
+          <Typography key={d.name} variant="body2">
+            ☐ {d.name} <em>({d.mandatory ? 'required' : 'optional'})</em>
+          </Typography>
+        ))}
+        {!t.pat_details && (t.default_details ?? []).length === 0 && <Typography variant="body2">-</Typography>}
+      </Box>
+    ),
+  },
   { key: 'normal', label: 'Normal range' },
   {
     key: 'timing',

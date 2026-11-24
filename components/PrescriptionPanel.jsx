@@ -47,11 +47,12 @@ const rowError = (row) => {
  * @param {string} aid - the appointment being prescribed against
  * @param {string} endpoint - '/doctor/diagnoseOPD' or '/doctor/diagnoseIPD'
  * @param {string} [initialNotes]
+ * @param {string} [notesLabel] - the label of the note box (an IPD note is ADDED to the stay's list of notes)
  * @param {string} [submitLabel]
  * @param {boolean} [allowEmpty] - OPD may close a visit with nothing prescribed; IPD may not
  * @param {() => void} [onDone] - called after the server accepted the prescription
  */
-export default function PrescriptionPanel({ aid, endpoint, initialNotes = '', submitLabel = 'Submit', allowEmpty = false, onDone }) {
+export default function PrescriptionPanel({ aid, endpoint, initialNotes = '', notesLabel = 'Notes', submitLabel = 'Submit', allowEmpty = false, onDone }) {
   const { labs, medicines, loading, load } = usePrescriptionCatalogStore();
   const [selectedLabs, setSelectedLabs] = useState([]);
   const [rows, setRows] = useState([]); // [{ medicine, days: '', times: [] }]
@@ -256,7 +257,7 @@ export default function PrescriptionPanel({ aid, endpoint, initialNotes = '', su
             fullWidth
             multiline
             minRows={3}
-            label="Notes"
+            label={notesLabel}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             slotProps={{ htmlInput: { maxLength: 1000 } }}

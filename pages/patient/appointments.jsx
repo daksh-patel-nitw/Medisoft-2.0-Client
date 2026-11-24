@@ -18,6 +18,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DownloadIcon from '@mui/icons-material/Download';
 import { apis } from '../../services/commonServices';
+import useRefreshStore from '../../store/useRefreshStore';
 import { PAGE_ACCESS } from '../../utils/pageAccess';
 import { decodeMedicineTimes, formatDate } from '../../utils/prescription.util';
 
@@ -162,23 +163,26 @@ const TYPES = { opd: 'Outpatient (OPD)', ipd: 'Inpatient (IPD)' };
 function AppointmentList({ type }) {
   const [page, setPage] = useState(1);
   const [result, setResult] = useState({ key: null, appointments: [], totalPages: 0 });
-  const key = `${type}|${page}`;
+  const refreshTick = useRefreshStore((state) => state.refreshTick);
+  const finishRefresh = useRefreshStore((state) => state.finishRefresh);
+  const key = `${type}|${page}|${refreshTick}`;
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       let data = null;
       try {
-        data = await apis.postReadRequest('/patient/appointments/history', { type, page });
+        data = await apis.postReadRequest('/patient/appointments/history', { type, page: String(page) });
       } catch (error) {
         // already toasted by the http client
       }
       if (!cancelled) setResult((prev) => ({ key, appointments: data?.appointments ?? prev.appointments, totalPages: data?.totalPages ?? prev.totalPages }));
+      finishRefresh();
     })();
     return () => {
       cancelled = true;
     };
-  }, [type, page, key]);
+  }, [type, page, key, finishRefresh]);
 
   if (result.key !== key && result.key === null) {
     return (

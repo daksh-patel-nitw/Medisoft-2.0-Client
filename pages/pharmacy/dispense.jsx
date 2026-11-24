@@ -89,7 +89,7 @@ function DispenseStep({ patient, onBack }) {
         render: (r) => <Checkbox size="small" checked={selected.has(r._id)} onChange={() => toggleOne(r._id)} sx={{ p: 0.5 }} />,
       },
       { key: 'mname', label: 'Medicine' },
-      { key: 'quantity', label: 'Quantity (units)', align: 'right' },
+      { key: 'quantity', label: 'Quantity (units; packs for pack-only medicines)', align: 'right' },
       { key: 'time', label: 'When to take', render: (r) => TIME_LABELS[r.time] ?? r.time },
       { key: 'dname', label: 'Doctor' },
       { key: 'schedule_date', label: 'Visit date', render: (r) => formatDate(r.schedule_date) },

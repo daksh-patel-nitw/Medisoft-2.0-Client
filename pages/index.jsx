@@ -117,6 +117,11 @@ const LandingPage = () => {
                         <Typography color="text.secondary">
                           {doc.department}
                         </Typography>
+                        {doc.degree && (
+                          <Typography variant="body2" color="text.secondary">
+                            {doc.degree}
+                          </Typography>
+                        )}
                       </CardContent>
                     </Card>
                   </Grid>

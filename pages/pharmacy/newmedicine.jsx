@@ -19,7 +19,7 @@ import useRefreshStore from '../../store/useRefreshStore';
 import { decodeToFlags } from '../../utils/permissions.util';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import CardActionButton from '../../components/CardActionButton';
-import MedicineForm, { EMPTY_MEDICINE, validateMedicine, toMedicinePayload } from '../../components/MedicineForm';
+import MedicineForm, { EMPTY_MEDICINE, validateMedicine, toMedicinePayload, sellsLoose } from '../../components/MedicineForm';
 import { PAGE_ACCESS } from '../../utils/pageAccess';
 
 // Same rule the API enforces for a category name (letters, digits, spaces).
@@ -34,7 +34,7 @@ function MedicineTab({ categories, onAdd }) {
 
   const submit = async (event) => {
     event.preventDefault();
-    const found = validateMedicine(values);
+    const found = validateMedicine(values, sellsLoose(categories, values.t));
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
@@ -118,25 +118,41 @@ function CategoryTab({ categories, canManage, onAdd, onDelete }) {
         </>
       )}
 
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, minHeight: 32 }}>
-        {categories.map((c) => (
-          <Chip
-            key={c._id}
-            size="small"
-            label={c.name}
-            // Hover shows what the Y/N flag means for this category.
-            title={c.freeQuantity === 'Y' ? 'Can be sold in loose pieces' : 'Sold in full packs only'}
-            variant={c.freeQuantity === 'Y' ? 'filled' : 'outlined'}
-            color="primary"
-            onDelete={canManage ? () => onDelete(c) : undefined}
-          />
-        ))}
-        {categories.length === 0 && (
-          <Typography variant="body2" color="text.secondary">
-            No categories yet.
-          </Typography>
-        )}
-      </Box>
+      {categories.length === 0 ? (
+        <Typography variant="body2" color="text.secondary">
+          No categories yet.
+        </Typography>
+      ) : (
+        // two columns: what can be sold in loose pieces, and what is sold in full packs only
+        <Grid container spacing={2}>
+          {[
+            { flag: 'Y', title: 'Sold in loose pieces', hint: 'e.g. tablets' },
+            { flag: 'N', title: 'Full packs only', hint: 'e.g. syrups' },
+          ].map((column) => {
+            const inColumn = categories.filter((c) => c.freeQuantity === column.flag);
+            return (
+              <Grid key={column.flag} size={{ xs: 6 }}>
+                <Typography variant="subtitle2" fontWeight="bold">
+                  {column.title}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 1 }}>
+                  {column.hint}
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, minHeight: 32 }}>
+                  {inColumn.map((c) => (
+                    <Chip key={c._id} size="small" label={c.name} color="primary" variant={column.flag === 'Y' ? 'filled' : 'outlined'} onDelete={canManage ? () => onDelete(c) : undefined} />
+                  ))}
+                  {inColumn.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      None
+                    </Typography>
+                  )}
+                </Box>
+              </Grid>
+            );
+          })}
+        </Grid>
+      )}
     </>
   );
 }

@@ -1,22 +1,31 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Button, Card, CardContent, CircularProgress, List, ListItemButton, ListItemText, Stack, TextField, Typography } from '@mui/material';
+import { Box, Button, Card, CardContent, CircularProgress, List, ListItemButton, ListItemText, Stack, Tab, Tabs, TextField, Typography } from '@mui/material';
 import Grid from '@mui/material/Grid2';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { apis } from '../../services/commonServices';
-import AppointmentDetails from '../../components/AppointmentDetails';
+import IpdHistory from '../../components/IpdHistory';
 import PrescriptionPanel from '../../components/PrescriptionPanel';
+import useRefreshStore from '../../store/useRefreshStore';
 import { PAGE_ACCESS } from '../../utils/pageAccess';
 import { formatDate } from '../../utils/prescription.util';
 
+const TAB_LIST = 'list';
+const TAB_PATIENT = 'patient';
+
 export default function DoctorIpdPage() {
+  const [tab, setTab] = useState(TAB_LIST);
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState('');
-  // bumped after a prescription is saved: the form restarts blank and "prescribed so far" re-reads
+  // bumped after a prescription is saved: the form restarts blank and the history re-reads
   const [version, setVersion] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
   const [result, setResult] = useState({ key: null, patients: [] });
 
-  // GET /doctor/getIPD -> this doctor's admitted patients: [{ _id (the appointment), pid, pname, createdAt, notes }]
+  const refreshTick = useRefreshStore((state) => state.refreshTick);
+  const finishRefresh = useRefreshStore((state) => state.finishRefresh);
+  const readKey = `${reloadKey}|${refreshTick}`;
+
+  // GET /doctor/getIPD -> this doctor's admitted patients: [{ _id (the appointment), pid, pname, createdAt }]
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -26,16 +35,17 @@ export default function DoctorIpdPage() {
       } catch (error) {
         // already toasted; keep the last good list
       }
-      if (!cancelled) setResult((prev) => ({ key: reloadKey, patients: patients ?? prev.patients }));
+      if (!cancelled) setResult((prev) => ({ key: readKey, patients: patients ?? prev.patients }));
+      finishRefresh();
     })();
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [readKey, finishRefresh]);
 
-  const loading = result.key !== reloadKey;
+  const loading = result.key !== readKey;
   const patients = result.patients;
-  const load = () => setReloadKey((k) => k + 1);
+  const selected = patients.find((p) => p._id === selectedId) ?? null;
 
   const visible = useMemo(() => {
     const text = search.trim().toLowerCase();
@@ -43,7 +53,11 @@ export default function DoctorIpdPage() {
     return patients.filter((p) => p.pname?.toLowerCase().includes(text) || p.pid?.toLowerCase().includes(text));
   }, [patients, search]);
 
-  const selected = patients.find((p) => p._id === selectedId) ?? null;
+  const openPatient = (id) => {
+    setSelectedId(id);
+    setVersion((v) => v + 1);
+    setTab(TAB_PATIENT);
+  };
 
   if (result.key === null) {
     return (
@@ -53,14 +67,23 @@ export default function DoctorIpdPage() {
     );
   }
 
+  // the patient's tab only exists once one has been chosen
+  const activeTab = tab === TAB_PATIENT && selected ? TAB_PATIENT : TAB_LIST;
+
   return (
-    <Grid container spacing={2} alignItems="flex-start">
-      <Grid size={{ xs: 12, md: 4 }}>
-        <Card>
+    <Box>
+      <Tabs value={activeTab} onChange={(e, next) => setTab(next)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
+        <Tab value={TAB_LIST} label="IPD patients" />
+        {selected && <Tab value={TAB_PATIENT} label={selected.pname} />}
+      </Tabs>
+
+      {activeTab === TAB_LIST ? (
+        // 1. the list, only at first - pick the patient to work on
+        <Card sx={{ maxWidth: 760, mx: 'auto' }}>
           <CardContent>
             <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
               <Typography variant="h6">IPD patients ({patients.length})</Typography>
-              <Button size="small" startIcon={<RefreshIcon />} onClick={load} disabled={loading}>
+              <Button size="small" startIcon={<RefreshIcon />} onClick={() => setReloadKey((k) => k + 1)} disabled={loading}>
                 Refresh
               </Button>
             </Stack>
@@ -72,7 +95,7 @@ export default function DoctorIpdPage() {
             ) : (
               <List dense sx={{ mt: 1, maxHeight: '60vh', overflowY: 'auto' }}>
                 {visible.map((p) => (
-                  <ListItemButton key={p._id} selected={p._id === selectedId} onClick={() => setSelectedId(p._id)}>
+                  <ListItemButton key={p._id} onClick={() => openPatient(p._id)}>
                     <ListItemText primary={p.pname} secondary={`${p.pid} · admitted ${formatDate(p.createdAt)}`} />
                   </ListItemButton>
                 ))}
@@ -80,48 +103,42 @@ export default function DoctorIpdPage() {
             )}
           </CardContent>
         </Card>
-      </Grid>
-
-      <Grid size={{ xs: 12, md: 8 }}>
-        {!selected ? (
-          <Typography color="text.secondary" align="center" sx={{ mt: 6 }}>
-            Select a patient to prescribe medicines and lab tests.
-          </Typography>
-        ) : (
-          <Stack spacing={2}>
+      ) : (
+        // 2. the patient: the stay's history on the left, adding medicines / labs / a note on the right
+        <Grid container spacing={2} alignItems="flex-start">
+          <Grid size={{ xs: 12, md: 5 }}>
             <Card>
               <CardContent>
                 <Typography variant="h5" fontWeight="bold">
                   {selected.pname}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {selected.pid}
+                  {selected.pid} · admitted {formatDate(selected.createdAt)}
                 </Typography>
-                <Box sx={{ mt: 1.5 }}>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Prescribed so far
-                  </Typography>
-                  <AppointmentDetails aid={selected._id} reloadKey={version} />
+                <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
+                  History
+                </Typography>
+                <Box sx={{ maxHeight: '70vh', overflowY: 'auto', pr: 0.5 }}>
+                  <IpdHistory aid={selected._id} reloadKey={version} />
                 </Box>
               </CardContent>
             </Card>
+          </Grid>
 
+          <Grid size={{ xs: 12, md: 7 }}>
             {/* keyed so switching patient, or saving, starts a blank form */}
             <PrescriptionPanel
               key={`${selected._id}-${version}`}
               aid={selected._id}
               endpoint="/doctor/diagnoseIPD"
-              initialNotes={selected.notes ?? ''}
+              notesLabel="Add a note"
               submitLabel="Save prescription"
-              onDone={() => {
-                setVersion((v) => v + 1);
-                load();
-              }}
+              onDone={() => setVersion((v) => v + 1)}
             />
-          </Stack>
-        )}
-      </Grid>
-    </Grid>
+          </Grid>
+        </Grid>
+      )}
+    </Box>
   );
 }
 

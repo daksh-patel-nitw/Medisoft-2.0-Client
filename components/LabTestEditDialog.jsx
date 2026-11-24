@@ -10,7 +10,7 @@ import LabTestForm, { validateLabTest, toLabPayload } from './LabTestForm';
  * Mount it only while editing (`{test && <LabTestEditDialog key={test._id} .../>}`) so the
  * form starts from that test's values each time.
  *
- * @param {{_id, name, price, pat_details, normal, timing: string[]}} test - the row being edited
+ * @param {{_id, name, price, pat_details, pat_details_mandatory, default_details: {name, mandatory}[], normal, timing: string[]}} test - the row being edited
  * @param {(payload: object) => Promise<boolean>} onSave - resolves true once saved
  * @param {() => void} onCancel
  */
@@ -19,6 +19,9 @@ export default function LabTestEditDialog({ test, onSave, onCancel }) {
     tname: test.name ?? '',
     price: String(test.price ?? ''),
     pat_details: test.pat_details ?? '',
+    // an older test has no flag: its detail was asked but never enforced, so it starts optional
+    pat_details_mandatory: Boolean(test.pat_details_mandatory),
+    default_details: Array.isArray(test.default_details) ? test.default_details.map((d) => ({ name: d.name, mandatory: Boolean(d.mandatory) })) : [],
     n_range: test.normal ?? '',
     timing: Array.isArray(test.timing) ? [...test.timing] : [],
   });

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
-import MedicineForm, { validateMedicine, toMedicinePayload } from './MedicineForm';
+import MedicineForm, { validateMedicine, toMedicinePayload, sellsLoose, packPriceOf } from './MedicineForm';
 
 /**
  * Edit-medicine modal: the same form as "add medicine", pre-filled. Only
@@ -16,17 +16,22 @@ import MedicineForm, { validateMedicine, toMedicinePayload } from './MedicineFor
  * @param {() => void} onCancel
  */
 export default function MedicineEditDialog({ medicine, categories, onSave, onCancel }) {
-  const [values, setValues] = useState({
-    name: medicine.name,
-    t: medicine.t?._id ?? '',
-    price: String(medicine.price),
-    ps: String(medicine.ps),
-    ps_u: String(medicine.ps_u),
+  const [values, setValues] = useState(() => {
+    const t = medicine.t?._id ?? '';
+    return {
+      name: medicine.name,
+      t,
+      // the price of a whole pack, shown only for categories sold in loose pieces (never saved)
+      packPrice: sellsLoose(categories, t) ? packPriceOf(medicine.price, medicine.ps) : '',
+      price: String(medicine.price),
+      ps: String(medicine.ps),
+      ps_u: String(medicine.ps_u),
+    };
   });
   const [errors, setErrors] = useState({});
 
   const handleSave = async () => {
-    const found = validateMedicine(values);
+    const found = validateMedicine(values, sellsLoose(categories, values.t));
     setErrors(found);
     if (Object.keys(found).length > 0) return;
     await onSave({ id: medicine._id, ...toMedicinePayload(values) });

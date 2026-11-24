@@ -12,7 +12,7 @@ import RoomForm, { validateRoom, toRoomPayload } from './RoomForm';
  * @param {(payload: object) => Promise<boolean>} onSave - resolves true once saved
  * @param {() => void} onCancel
  */
-export default function RoomEditDialog({ room, categories, onSave, onCancel }) {
+export default function RoomEditDialog({ room, categories, departments, onSave, onCancel }) {
   const [values, setValues] = useState({
     room_no: room.room_no ?? '',
     floor: String(room.floor ?? ''),
@@ -42,6 +42,7 @@ export default function RoomEditDialog({ room, categories, onSave, onCancel }) {
               setErrors({});
             }}
             categories={categories}
+          departments={departments}
             showStatus
             errors={errors}
           />

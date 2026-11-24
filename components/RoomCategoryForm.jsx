@@ -101,7 +101,8 @@ export default function RoomCategoryForm({ values, onChange, errors = {} }) {
         <Typography variant="subtitle2" color="text.secondary" gutterBottom>
           Amenities
         </Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 3 }}>
+        {/* pl: a switch's label is pulled left by its own margin; without this room the first one is cut off by the card */}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 3, pl: 1.5 }}>
           {AMENITIES.map(({ key, label }) => (
             <FormControlLabel
               key={key}

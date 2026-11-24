@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, Tabs, Tab, Box, Button, Typography, TextField, Chip, Skeleton } from '@mui/material';
+import { Card, CardContent, Tabs, Tab, Box, Button, Typography, TextField, Chip, Skeleton, Checkbox, FormControlLabel, FormGroup } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { toast } from 'react-toastify';
@@ -12,8 +12,8 @@ import { PAGE_ACCESS } from '../../utils/pageAccess';
 const STATUS_PAID = 'B'; // paid, waiting for the sample
 const STATUS_TAKEN = 'T'; // sample taken, waiting for the report
 
-// Same rule the API enforces for the sample details (letters, spaces, ' and -).
-const DETAILS_PATTERN = /^[\p{L}\p{M}\s'-]+$/u;
+// Same rule the API enforces for the sample detail (letters, digits, spaces and . , - / % ( ), up to 200 characters).
+const DETAILS_PATTERN = /^[\p{L}\p{M}\p{N}\s.,\-/%()]+$/u;
 const MAX_REPORT_BYTES = 1024 * 1024; // the API rejects PDFs over 1 MB
 
 const formatDate = (value) => (value ? new Date(value).toLocaleDateString([], { dateStyle: 'medium' }) : '-');
@@ -22,16 +22,27 @@ const formatDate = (value) => (value ? new Date(value).toLocaleDateString([], { 
 // One test to process: sample details (tab 1) or a report upload (tab 2)
 // ==========================================
 function TestCard({ test, mode, onDone }) {
-  const [pRange, setPRange] = useState('');
   const [details, setDetails] = useState('');
+  const [checked, setChecked] = useState([]); // the default details that were ticked
   const [file, setFile] = useState(null);
   const [errors, setErrors] = useState({});
 
+  // What THIS test asks for when the sample is taken (see the lab test form): one detail typed into a box whose
+  // label is the test's `pat_details`, and ready-made items to tick. Each is mandatory or optional. A test
+  // prescribed before these existed has none of the flags, so it asks for nothing in particular.
+  const patDetails = test.pat_details || '';
+  const defaultDetails = test.default_details ?? [];
+
+  const toggle = (name) => setChecked((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
+
   const saveSample = async () => {
     const found = {};
-    for (const [field, value] of [['p_range', pRange], ['details', details]]) {
-      if (value.trim() && !DETAILS_PATTERN.test(value.trim())) found[field] = "Letters, spaces, ' and - only";
-    }
+    const typed = details.trim();
+    if (patDetails && test.pat_details_mandatory && !typed) found.details = 'Required';
+    else if (typed && !DETAILS_PATTERN.test(typed)) found.details = 'Letters, numbers, spaces and . , - / % ( ) only';
+    else if (typed.length > 200) found.details = 'Up to 200 characters';
+    const missing = defaultDetails.filter((d) => d.mandatory && !checked.includes(d.name));
+    if (missing.length > 0) found.checked = `Please confirm: ${missing.map((d) => d.name).join(', ')}`;
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
@@ -39,8 +50,8 @@ function TestCard({ test, mode, onDone }) {
       // `aid` here is the lab prescription's own id (the API's field is named that way).
       await apis.putRequest('/laboratory/details', {
         aid: test._id,
-        ...(pRange.trim() && { p_range: pRange.trim() }),
-        ...(details.trim() && { details: details.trim() }),
+        ...(typed && { details: typed }),
+        ...(defaultDetails.length > 0 && { checked }),
       });
       onDone();
     } catch (error) {
@@ -91,39 +102,61 @@ function TestCard({ test, mode, onDone }) {
 
         {mode === 'sample' ? (
           <>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Details to take from the patient: {test.pat_details || '-'}
-              {test.n_range ? ` · Normal range: ${test.n_range}` : ''}
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            {test.n_range && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Normal range: {test.n_range}
+              </Typography>
+            )}
+
+            {/* the one detail to type in: its label is what the test asks the lab to collect */}
+            {patDetails && (
               <TextField
+                fullWidth
                 size="small"
-                label="Patient's reading"
-                value={pRange}
-                onChange={(e) => setPRange(e.target.value)}
-                error={Boolean(errors.p_range)}
-                helperText={errors.p_range || ' '}
-                sx={{ flex: '1 1 220px' }}
-              />
-              <TextField
-                size="small"
-                label="Details collected"
+                label={patDetails}
+                required={Boolean(test.pat_details_mandatory)}
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
                 error={Boolean(errors.details)}
-                helperText={errors.details || ' '}
-                sx={{ flex: '2 1 280px' }}
+                helperText={errors.details || (test.pat_details_mandatory ? ' ' : 'Optional')}
+                sx={{ mb: 1 }}
               />
-              <Button variant="contained" onClick={saveSample} sx={{ height: 40 }}>
-                Save sample details
-              </Button>
-            </Box>
+            )}
+
+            {/* ready-made items to tick */}
+            {defaultDetails.length > 0 && (
+              <Box sx={{ mb: 1 }}>
+                <Typography variant="subtitle2">Confirm</Typography>
+                <FormGroup>
+                  {defaultDetails.map((d) => (
+                    <FormControlLabel
+                      key={d.name}
+                      control={<Checkbox size="small" checked={checked.includes(d.name)} onChange={() => toggle(d.name)} />}
+                      label={`${d.name} (${d.mandatory ? 'required' : 'optional'})`}
+                    />
+                  ))}
+                </FormGroup>
+                <Typography variant="caption" color="error" component="div" sx={{ minHeight: 18 }}>
+                  {errors.checked || ' '}
+                </Typography>
+              </Box>
+            )}
+
+            {!patDetails && defaultDetails.length === 0 && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Nothing needs to be collected for this test.
+              </Typography>
+            )}
+
+            <Button variant="contained" onClick={saveSample}>
+              Save sample details
+            </Button>
           </>
         ) : (
           <>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {test.details ? `Sample details: ${test.details}` : 'Sample taken.'}
-              {test.p_range ? ` · Reading: ${test.p_range}` : ''}
+              {test.details ? `${test.pat_details ? `${test.pat_details}: ` : 'Sample details: '}${test.details}` : 'Sample taken.'}
+              {(test.checked_details ?? []).length > 0 ? ` · Confirmed: ${test.checked_details.join(', ')}` : ''}
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
               <Button component="label" variant="outlined" startIcon={<UploadFileIcon />}>

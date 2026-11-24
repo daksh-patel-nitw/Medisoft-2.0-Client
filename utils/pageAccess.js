@@ -21,15 +21,15 @@ export const PAGE_ACCESS = {
 
   // D: viewOpdQueue (0) + viewAppointmentHistory (1) + diagnoseOpd (2) + viewLabResults (3, the lab + medicine lists)
   doctorOpd: { D: '1111' },
+  // D: viewAppointmentHistory (1) + viewLabResults (3, the lab + medicine lists) + manageOpdAppointments (6)
+  doctorAppointments: { D: '0101001' },
   // D: viewAppointmentHistory (1) + viewLabResults (3) + viewIpdQueue (4) + diagnoseIpd (5)
   doctorIpd: { D: '010111' },
 
-  // PT: patientPortalAccess (0)
+  // PT: the one bit every patient has (a patient is a type of member, not a role; nobody else gets it)
   patientAppointments: { PT: '1' },
-  // PT: bookOwnAppointment (1)
-  patientBookAppointment: { PT: '01' },
-  // PAY: createPaymentOrder (1) - pending bills + pay online
-  patientBills: { PAY: '01' },
+  patientBookAppointment: { PT: '1' },
+  patientBills: { PT: '1' },
 
   // R: registerPatient (0)
   receptionRegisterPatient: { R: '1000000' },
@@ -41,6 +41,8 @@ export const PAGE_ACCESS = {
   receptionAppointments: { R: '0001000' },
   // R: viewQueueScreen (4)
   receptionQueue: { R: '0000100' },
+  // R: manageMemberDetails (8) - search patients / employees and correct their details
+  receptionMembers: { R: '000000001' },
   // R: manageLockedOutPatients (5)
   receptionLockouts: { R: '0000010' },
 
@@ -85,7 +87,9 @@ const BILL_IPD = '000001';
 const R_SEARCH = ['0100000', '0000001'];
 const billPage = (...payBits) => payBits.flatMap((PAY) => R_SEARCH.map((R) => ({ PAY, R })));
 
-PAGE_ACCESS.billingBills = billPage(BILL_DOCTOR, BILL_MEDICINES, BILL_LAB, BILL_IPD); // any biller
+// all four billing permissions together (doctor + medicines + lab + IPD): the full Billing menu is for the biller role;
+// a department desk with just one of them uses its own Bills page instead
+PAGE_ACCESS.billingBills = billPage('001111');
 PAGE_ACCESS.receptionBills = billPage(BILL_DOCTOR);
 PAGE_ACCESS.pharmacyBills = billPage(BILL_MEDICINES);
 PAGE_ACCESS.labBills = billPage(BILL_LAB);

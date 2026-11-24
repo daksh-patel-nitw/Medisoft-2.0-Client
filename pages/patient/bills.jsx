@@ -1,18 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Button, Card, CardContent, CircularProgress, Divider, Stack, Table, TableBody, TableCell, TableRow, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, CircularProgress, Divider, Stack, Typography } from '@mui/material';
 import PaymentIcon from '@mui/icons-material/Payment';
 import { toast } from 'react-toastify';
+import BillTable from '../../components/BillTable';
 import { apis } from '../../services/commonServices';
+import useRefreshStore from '../../store/useRefreshStore';
 import { PAGE_ACCESS } from '../../utils/pageAccess';
-
-const SECTIONS = [
-  { title: 'Doctor consultation', kinds: ['doctor'] },
-  { title: 'Medicines', kinds: ['medicine'] },
-  { title: 'Lab tests', kinds: ['lab'] },
-  { title: 'Room & inpatient doctor', kinds: ['room', 'ipdDoctor'] },
-];
-
-const rupees = (value) => `₹${Number(value).toFixed(2)}`;
+import { rupees, useBillSelection } from '../../utils/billing.util';
 
 const CHECKOUT_SRC = 'https://checkout.razorpay.com/v1/checkout.js';
 
@@ -29,52 +23,38 @@ function loadCheckout() {
   });
 }
 
-export default function PatientBillsPage({ currentUser }) {
-  const [reloadKey, setReloadKey] = useState(0);
-  const [bill, setBill] = useState(null); // null = loading; { lines, total }
+/** The patient's pending bill: tick what to pay now, pay it online. */
+function BillView({ bill, currentUser, onPaid }) {
+  const { selected, setSelected, total, payload, count } = useBillSelection(bill.lines);
   const [paying, setPaying] = useState(false);
   // A payment id Razorpay gave us that the server hasn't confirmed yet (e.g. the connection dropped): kept so it can be retried.
   const [unconfirmedPaymentId, setUnconfirmedPaymentId] = useState(null);
 
-  // GET /payment/pending -> { lines: [{ kind, id?, aid, name, price }], total }
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await apis.getRequest('/payment/pending');
-        if (!cancelled) setBill(data ?? { lines: [], total: 0 });
-      } catch (error) {
-        if (!cancelled) setBill((prev) => prev ?? { lines: [], total: 0 });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const reload = () => setReloadKey((k) => k + 1);
-
   // Only the payment id goes to the server; it asks Razorpay what was paid and marks the right charges itself.
-  const confirm = useCallback(async (paymentId) => {
-    try {
-      await apis.postRequest('/payment/verify', { paymentId });
-      setUnconfirmedPaymentId(null);
-    } catch (error) {
-      setUnconfirmedPaymentId(paymentId);
-    } finally {
-      setReloadKey((k) => k + 1);
-    }
-  }, []);
+  const confirm = useCallback(
+    async (paymentId) => {
+      try {
+        await apis.postRequest('/payment/verify', { paymentId });
+        setUnconfirmedPaymentId(null);
+      } catch (error) {
+        setUnconfirmedPaymentId(paymentId);
+      } finally {
+        onPaid();
+      }
+    },
+    [onPaid],
+  );
 
   const pay = async () => {
     setPaying(true);
     try {
       if (!(await loadCheckout())) {
         toast.error('Could not load the payment window. Check your connection and try again.');
+        setPaying(false);
         return;
       }
-      // The amount is decided by the server from what is actually owed - nothing is sent.
-      const order = await apis.postRequest('/payment/order');
+      // Only the ids of the ticked items are sent; the amount is decided by the server from exactly those.
+      const order = await apis.postRequest('/payment/order', payload);
       const checkout = new window.Razorpay({
         key: order.keyId,
         order_id: order.orderId,
@@ -91,14 +71,83 @@ export default function PatientBillsPage({ currentUser }) {
       });
       checkout.on('payment.failed', (response) => toast.error(response?.error?.description || 'Payment failed.'));
       checkout.open();
-      return; // stays "paying" until the window is dismissed or the payment is confirmed
     } catch (error) {
       // already toasted by the http client
+      setPaying(false);
     }
-    setPaying(false);
   };
 
-  if (bill === null) {
+  return (
+    <>
+      {unconfirmedPaymentId && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => confirm(unconfirmedPaymentId)}>
+              Retry
+            </Button>
+          }
+        >
+          Your payment went through but we could not confirm it yet. Do not pay again - retry the confirmation.
+        </Alert>
+      )}
+
+      {bill.lines.length === 0 ? (
+        <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+          You have nothing to pay.
+        </Typography>
+      ) : (
+        <>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Tick the items you want to pay now.
+          </Typography>
+          <BillTable lines={bill.lines} selected={selected} onChange={setSelected} />
+          <Divider sx={{ my: 2 }} />
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography variant="h6">Total to pay</Typography>
+            <Typography variant="h6">{rupees(total)}</Typography>
+          </Stack>
+          <Button fullWidth variant="contained" size="large" startIcon={<PaymentIcon />} sx={{ mt: 2 }} onClick={pay} disabled={paying || count === 0}>
+            {paying ? 'Waiting for payment...' : count === 0 ? 'Select the items to pay' : `Pay ${rupees(total)}`}
+          </Button>
+          <Button fullWidth size="small" sx={{ mt: 1 }} onClick={onPaid}>
+            Refresh
+          </Button>
+        </>
+      )}
+    </>
+  );
+}
+
+export default function PatientBillsPage({ currentUser }) {
+  const [reloadKey, setReloadKey] = useState(0);
+  const refreshTick = useRefreshStore((state) => state.refreshTick);
+  const finishRefresh = useRefreshStore((state) => state.finishRefresh);
+  const readKey = `${reloadKey}|${refreshTick}`;
+  const [result, setResult] = useState({ key: null, bill: null }); // key = which read the bill is from
+
+  // GET /payment/pending -> { lines: [{ kind, id?, roomId?, aid, dname, name, units?, unitPrice?, price }], total }
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let data = null;
+      try {
+        data = (await apis.getRequest('/payment/pending')) ?? { lines: [], total: 0 };
+      } catch (error) {
+        // already toasted by the http client; keep the last good bill
+      }
+      if (!cancelled) setResult((prev) => ({ key: readKey, bill: data ?? prev.bill ?? { lines: [], total: 0 } }));
+      finishRefresh();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [readKey, finishRefresh]);
+
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  if (result.key === null) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
         <CircularProgress />
@@ -108,68 +157,13 @@ export default function PatientBillsPage({ currentUser }) {
 
   return (
     <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-      <Card sx={{ width: '100%', maxWidth: 800, boxShadow: 3 }}>
+      <Card sx={{ width: '100%', maxWidth: 900, boxShadow: 3 }}>
         <CardContent>
           <Typography variant="h6" fontWeight="bold" gutterBottom>
             Pending bills
           </Typography>
-
-          {unconfirmedPaymentId && (
-            <Alert
-              severity="warning"
-              sx={{ mb: 2 }}
-              action={
-                <Button color="inherit" size="small" onClick={() => confirm(unconfirmedPaymentId)}>
-                  Retry
-                </Button>
-              }
-            >
-              Your payment went through but we could not confirm it yet. Do not pay again - retry the confirmation.
-            </Alert>
-          )}
-
-          {bill.lines.length === 0 ? (
-            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-              You have nothing to pay.
-            </Typography>
-          ) : (
-            <>
-              {SECTIONS.map(({ title, kinds }) => {
-                const lines = bill.lines.filter((l) => kinds.includes(l.kind));
-                if (lines.length === 0) return null;
-                return (
-                  <Box key={title} sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      {title}
-                    </Typography>
-                    <Table size="small">
-                      <TableBody>
-                        {lines.map((l) => (
-                          <TableRow key={`${l.kind}-${l.id ?? l.aid}`}>
-                            <TableCell sx={{ pl: 0 }}>{l.name}</TableCell>
-                            <TableCell align="right" sx={{ pr: 0 }}>
-                              {rupees(l.price)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </Box>
-                );
-              })}
-              <Divider sx={{ mb: 2 }} />
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="h6">Total</Typography>
-                <Typography variant="h6">{rupees(bill.total)}</Typography>
-              </Stack>
-              <Button fullWidth variant="contained" size="large" startIcon={<PaymentIcon />} sx={{ mt: 2 }} onClick={pay} disabled={paying || bill.total <= 0}>
-                {paying ? 'Waiting for payment...' : `Pay ${rupees(bill.total)}`}
-              </Button>
-              <Button fullWidth size="small" sx={{ mt: 1 }} onClick={reload}>
-                Refresh
-              </Button>
-            </>
-          )}
+          {/* keyed so the ticks start fresh (everything ticked) every time the bill is re-read */}
+          <BillView key={result.key} bill={result.bill} currentUser={currentUser} onPaid={reload} />
         </CardContent>
       </Card>
     </Box>

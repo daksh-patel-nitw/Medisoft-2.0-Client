@@ -8,7 +8,7 @@ import usePatientStore from '../store/usePatientStore';
 
 /**
  * Step 1 of the pharmacy / lab flows: find the patient with the shared
- * three-box finder (name, ID, mobile - picking one fills the other two), then
+ * three-box finder (mobile, name, ID - picking one fills the other two), then
  * press Next. Calls `onNext(patient)` with `{ pname, pid, mobile }`.
  *
  * The finder's typed text lives in a shared store, so it is cleared when this
@@ -34,17 +34,18 @@ export default function PatientFinder({ onNext }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box sx={{ pt: 1, flexGrow: 1 }}>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Search by name, ID or mobile number and pick the patient.
+          Search by mobile number, name or ID and pick the patient.
         </Typography>
         <Grid container spacing={3}>
+          {/* mobile first, then name, then ID (the boxes' numbers are fixed: 1 name, 2 ID, 3 mobile) */}
+          <Grid size={{ xs: 12 }}>
+            <PatientAutocomplete index={3} setPatient={setPatient} patient={patient} />
+          </Grid>
           <Grid size={{ xs: 12 }}>
             <PatientAutocomplete index={1} setPatient={setPatient} patient={patient} />
           </Grid>
           <Grid size={{ xs: 12 }}>
             <PatientAutocomplete index={2} setPatient={setPatient} patient={patient} />
-          </Grid>
-          <Grid size={{ xs: 12 }}>
-            <PatientAutocomplete index={3} setPatient={setPatient} patient={patient} />
           </Grid>
         </Grid>
       </Box>

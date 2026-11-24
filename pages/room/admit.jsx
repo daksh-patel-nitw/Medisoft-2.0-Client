@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Grid from '@mui/material/Grid2';
-import { Card, CardContent, Box, Button, Typography, Chip, Radio, TextField, FormControlLabel, Switch } from '@mui/material';
+import { toast } from 'react-toastify';
+import { Alert, Card, CardContent, Box, Button, Typography, Chip, Radio, TextField } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { apis } from '../../services/commonServices';
 import DataTable from '../../components/DataTable';
@@ -10,6 +11,13 @@ import CardActionButton from '../../components/CardActionButton';
 import RoomCategoryDetails from '../../components/RoomCategoryDetails';
 import { browserTimeZone, todayInputValue, zonedTimeToUtc } from '../../utils/timeZone';
 import { PAGE_ACCESS } from '../../utils/pageAccess';
+
+// An <input type="datetime-local"> value (YYYY-MM-DDTHH:mm) for a Date, in the browser's own time zone.
+const toLocalInput = (date) => {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`;
+};
+const SHIFT_MAX_BACK_MS = 2 * 24 * 60 * 60 * 1000; // a shift can be entered up to 2 days late
 
 // ==========================================
 // STEP 2: choose the doctor, then a room in the doctor's department, then admit
@@ -21,11 +29,21 @@ function AdmitStep({ patient, onBack, onAdmitted }) {
   const [rooms, setRooms] = useState(null); // rooms with a free bed in the doctor's department; null = not loaded
   const [roomId, setRoomId] = useState('');
   const [admitDate, setAdmitDate] = useState(todayInputValue());
-  const [shifting, setShifting] = useState(false); // true = the patient is already admitted and is moving rooms
+  // A shift records when the patient actually moved: its date AND time start as right now, and can go back up to 2 days.
+  const [shiftAt, setShiftAt] = useState(() => toLocalInput(new Date()));
+  const [shiftMin] = useState(() => toLocalInput(new Date(Date.now() - SHIFT_MAX_BACK_MS)));
+  // Where the patient is admitted right now (null = still checking). Decided by the check, never by a toggle:
+  // a patient already in a bed can only be SHIFTED, anyone else is admitted.
+  const [current, setCurrent] = useState(null);
+  const shifting = current?.admitted === true;
 
-  // GET /room/doctors: the doctors a patient can be admitted under (inpatient doctors).
+  // GET /room/doctors: the doctors a patient can be admitted under (inpatient doctors); and the admission check.
   useEffect(() => {
     let cancelled = false;
+    apis
+      .getRequest('/room/prescription/current', { pid: patient.pid })
+      .then((info) => !cancelled && setCurrent(info ?? { admitted: false }))
+      .catch(() => !cancelled && setCurrent({ admitted: false }));
     apis
       .getRequest('/room/doctors')
       .then((list) => !cancelled && setDoctors(list || []))
@@ -37,7 +55,7 @@ function AdmitStep({ patient, onBack, onAdmitted }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [patient.pid]);
 
   // GET /room/dep/:dep: the rooms in that department that still have a free bed.
   const chooseDoctor = async (next) => {
@@ -74,8 +92,19 @@ function AdmitStep({ patient, onBack, onAdmitted }) {
   );
 
   const admit = async () => {
-    // today -> right now; a later day -> the start of that day in the browser's timezone
-    const admit_date = admitDate === todayInputValue() ? new Date() : zonedTimeToUtc(admitDate, '00:00', browserTimeZone());
+    let admit_date;
+    if (shifting) {
+      // exactly the picked date and time (never in the future, at most 2 days back, not before the stay began)
+      admit_date = new Date(shiftAt);
+      const now = Date.now();
+      if (Number.isNaN(admit_date.getTime())) return toast.error('Pick the date and time of the shift.');
+      if (admit_date.getTime() > now + 60 * 1000) return toast.error('The shift time cannot be in the future.');
+      if (admit_date.getTime() < now - SHIFT_MAX_BACK_MS) return toast.error('The shift time cannot be more than 2 days back.');
+      if (current?.since && admit_date.getTime() < new Date(current.since).getTime()) return toast.error('The shift cannot be earlier than the time the current admission began.');
+    } else {
+      // today -> right now; a later day -> the start of that day in the browser's timezone
+      admit_date = admitDate === todayInputValue() ? new Date() : zonedTimeToUtc(admitDate, '00:00', browserTimeZone());
+    }
     try {
       await apis.postRequest('/room/prescription', {
         did: doctor.did,
@@ -108,6 +137,16 @@ function AdmitStep({ patient, onBack, onAdmitted }) {
       </Box>
 
       <Box sx={{ flexGrow: 1, minHeight: 0, overflowY: 'auto', pt: 1, pr: 0.5 }}>
+        {/* already in a bed? then the only thing to do here is shift them to another room */}
+        {shifting && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Currently admitted in room <strong>{current.room_no}</strong>
+            {current.department ? ` (${current.department})` : ''}
+            {current.dname ? ` under Dr. ${current.dname}` : ''}
+            {current.since ? ` since ${new Date(current.since).toLocaleDateString([], { dateStyle: 'medium' })}` : ''}. Choose the doctor and the new room, and the date to shift.
+          </Alert>
+        )}
+
         {/* 1. the (inpatient) doctor */}
         <Box sx={{ maxWidth: 480 }}>
           <DoctorPicker doctors={doctors} value={doctor} onChange={chooseDoctor} label="Select doctor (inpatient)" priceSuffix="/day" />
@@ -148,26 +187,35 @@ function AdmitStep({ patient, onBack, onAdmitted }) {
           </Box>
         )}
 
-        {/* 3. when, and whether this is a shift */}
+        {/* 3. when: a shift is dated by the moment it happened (now by default, up to 2 days back); an admission by its day */}
         {doctor && selectedRoom && (
-          <Box sx={{ mt: 3, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-            <TextField
-              size="small"
-              label="Admission date"
-              type="date"
-              value={admitDate}
-              onChange={(e) => setAdmitDate(e.target.value)}
-              slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: todayInputValue() } }}
-            />
-            <FormControlLabel
-              control={<Switch checked={shifting} onChange={(e) => setShifting(e.target.checked)} />}
-              label="Patient is already admitted - shift to this room"
-            />
+          <Box sx={{ mt: 3 }}>
+            {shifting ? (
+              <TextField
+                size="small"
+                label="Shift date and time"
+                type="datetime-local"
+                value={shiftAt}
+                onChange={(e) => setShiftAt(e.target.value)}
+                helperText="Now by default - change it only if the shift was not entered in time (up to 2 days back, never the future)"
+                slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: shiftMin } }}
+                sx={{ minWidth: 280 }}
+              />
+            ) : (
+              <TextField
+                size="small"
+                label="Admission date"
+                type="date"
+                value={admitDate}
+                onChange={(e) => setAdmitDate(e.target.value)}
+                slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: todayInputValue() } }}
+              />
+            )}
           </Box>
         )}
       </Box>
 
-      <CardActionButton onClick={admit} disabled={!doctor || !roomId || !admitDate || admitDate < todayInputValue()}>
+      <CardActionButton onClick={admit} disabled={current === null || !doctor || !roomId || (shifting ? !shiftAt : !admitDate || admitDate < todayInputValue())}>
         {shifting ? 'Shift patient' : 'Admit patient'}
       </CardActionButton>
     </Box>

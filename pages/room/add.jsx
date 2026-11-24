@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, Box, Skeleton } from '@mui/material';
 import { apis } from '../../services/commonServices';
 import RoomForm, { EMPTY_ROOM, validateRoom, toRoomPayload } from '../../components/RoomForm';
+import useRoomDepartmentsStore from '../../store/useRoomDepartmentsStore';
 import CardActionButton from '../../components/CardActionButton';
 import { PAGE_ACCESS } from '../../utils/pageAccess';
 
@@ -9,6 +10,11 @@ export default function AddRoomPage() {
   const [categories, setCategories] = useState(null); // null = still loading
   const [values, setValues] = useState(EMPTY_ROOM);
   const [errors, setErrors] = useState({});
+  const { departments, load: loadDepartments } = useRoomDepartmentsStore();
+
+  useEffect(() => {
+    loadDepartments();
+  }, [loadDepartments]);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,6 +62,7 @@ export default function AddRoomPage() {
                     setErrors({});
                   }}
                   categories={categories}
+                  departments={departments}
                   errors={errors}
                 />
               )}

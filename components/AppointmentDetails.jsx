@@ -10,7 +10,7 @@ import { decodeMedicineTimes } from '../utils/prescription.util';
  * Accordion with unmountOnExit) and the data is fetched only when it is opened.
  *
  *   -> { medicines: [{ mname, quantity, time }], labtests: [{ tname }],
- *        patient: { weight, height, notes, selected_doctor_qs } }
+ *        patient: { weight, height, notes: [{ text, dname, at }], selected_doctor_qs } }
  */
 export default function AppointmentDetails({ aid, reloadKey = 0 }) {
   const [state, setState] = useState({ key: null, data: null });
@@ -42,6 +42,8 @@ export default function AppointmentDetails({ aid, reloadKey = 0 }) {
   if (!state.data) return <Typography color="text.secondary">Could not load this appointment.</Typography>;
 
   const { medicines = [], labtests = [], patient } = state.data;
+  // notes are a list of { text, dname, at } (an older one may still be a plain string)
+  const notes = Array.isArray(patient?.notes) ? patient.notes : patient?.notes ? [{ text: patient.notes }] : [];
 
   return (
     <Stack spacing={1.5}>
@@ -96,14 +98,25 @@ export default function AppointmentDetails({ aid, reloadKey = 0 }) {
         )}
       </Box>
 
-      {patient?.notes && (
+      {notes.length > 0 && (
         <Box>
           <Typography variant="subtitle2" gutterBottom>
             Notes
           </Typography>
-          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-            {patient.notes}
-          </Typography>
+          <Stack spacing={0.75}>
+            {notes.map((n, i) => (
+              <Box key={i}>
+                {(n.dname || n.at) && (
+                  <Typography variant="caption" color="text.secondary">
+                    {[n.dname ? `Dr. ${n.dname}` : null, n.at ? new Date(n.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : null].filter(Boolean).join(' · ')}
+                  </Typography>
+                )}
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {n.text}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
         </Box>
       )}
     </Stack>

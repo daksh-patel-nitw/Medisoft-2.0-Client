@@ -1,9 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import Grid from '@mui/material/Grid2';
-import { Card, CardContent, Box, TextField, Autocomplete, FormControl, FormLabel, RadioGroup, FormControlLabel, Radio, FormHelperText } from '@mui/material';
+import { Card, CardContent, Box, TextField, FormControl, FormLabel, RadioGroup, FormControlLabel, Radio, FormHelperText } from '@mui/material';
 import { apis } from '../services/commonServices';
 import CardActionButton from './CardActionButton';
-import { browserTimeZone } from '../utils/timeZone';
 
 // The rules below mirror the API's validators (createAddNewMemberDTO in the
 // server's member.dto.ts) so the user sees a problem next to the field.
@@ -34,16 +33,14 @@ const PATIENT_FIELDS = [
   { key: 'others', label: 'Other notes (optional)', test: NAME, message: NAME_MESSAGE },
 ];
 
-const EMPLOYEE_FIELDS = [
-  { key: 'degree', label: 'Degree', required: true, test: NAME, message: NAME_MESSAGE },
-  { key: 'college', label: 'College', required: true, test: NAME, message: NAME_MESSAGE },
-  { key: 'timezone', label: 'Timezone', required: true, kind: 'timezone' },
-];
+// Employees need nothing extra at registration: their degree, college and working details are filled in by the
+// doctor after first login, and their time zone is chosen while setting their own password.
+const EMPLOYEE_FIELDS = [];
 
 const today = () => new Date().toISOString().split('T')[0];
 
 function initialValues(fields) {
-  return Object.fromEntries(fields.map((f) => [f.key, f.key === 'timezone' ? browserTimeZone() : '']));
+  return Object.fromEntries(fields.map((f) => [f.key, '']));
 }
 
 function validate(fields, values) {
@@ -66,14 +63,13 @@ function validate(fields, values) {
  * (centered card, fields, rule + tall button at the bottom). The two
  * registration pages are this component with a different `kind`:
  *   patient  -> POST /reception/addPatient   (adds allergies / conditions / notes)
- *   employee -> POST /reception/addEmployee  (adds degree / college / timezone)
+ *   employee -> POST /reception/addEmployee
  *
  * @param {'patient'|'employee'} kind
  */
 export default function MemberRegistrationForm({ kind }) {
   const isPatient = kind === 'patient';
   const fields = useMemo(() => [...COMMON_FIELDS, ...(isPatient ? PATIENT_FIELDS : EMPLOYEE_FIELDS)], [isPatient]);
-  const timeZones = useMemo(() => (typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [browserTimeZone()]), []);
 
   const [values, setValues] = useState(() => initialValues(fields));
   const [errors, setErrors] = useState({});
@@ -117,19 +113,6 @@ export default function MemberRegistrationForm({ kind }) {
           </RadioGroup>
           {errors.gender && <FormHelperText>{errors.gender}</FormHelperText>}
         </FormControl>
-      );
-    }
-    if (f.kind === 'timezone') {
-      return (
-        <Autocomplete
-          options={timeZones}
-          value={values.timezone || null}
-          onChange={(e, next) => set('timezone', next || '')}
-          size="small"
-          renderInput={(params) => (
-            <TextField {...params} label={f.label} error={Boolean(errors.timezone)} helperText={errors.timezone || ' '} />
-          )}
-        />
       );
     }
     return (

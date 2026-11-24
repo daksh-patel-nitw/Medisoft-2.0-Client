@@ -28,6 +28,7 @@ export const PERMISSION_MODULES = {
     { key: 'viewLabResults', label: 'View lab tests & medicine names (for prescribing)' },
     { key: 'viewIpdQueue', label: 'View IPD queue' },
     { key: 'diagnoseIpd', label: 'Diagnose IPD patient' },
+    { key: 'manageOpdAppointments', label: 'Manage own OPD appointments (list, edit within 2 days, priority, emergency leave)' },
   ],
   L: [
     { key: 'addLabTest', label: 'Add lab test' },
@@ -46,19 +47,13 @@ export const PERMISSION_MODULES = {
   ],
   PAY: [
     { key: 'createPaymentQr', label: 'Create payment QR (counter)' },
-    { key: 'createPaymentOrder', label: 'Create payment order (patient)' },
+    { key: 'createPaymentOrder', label: '(retired - has no effect)' },
     // The biller's per-charge-type bill access: which slices of a patient's pending bills
     // they see and which charges they can mark billed.
     { key: 'billDoctorCharges', label: 'View / mark billed: doctor consultation charges' },
     { key: 'billMedicines', label: 'View / mark billed: medicines' },
     { key: 'billLabTests', label: 'View / mark billed: lab tests' },
     { key: 'billIpd', label: 'View / mark billed: IPD (room stays + inpatient doctor)' },
-  ],
-  // First bit: the read-only patient.route.ts endpoints (appointment history,
-  // prescriptions, bills, lab report download). Second: book your own appointment.
-  PT: [
-    { key: 'patientPortalAccess', label: 'Patient portal access (appointments, prescriptions, bills, lab reports)' },
-    { key: 'bookOwnAppointment', label: 'Book own appointment (doctors, timings, book)' },
   ],
   R: [
     { key: 'registerPatient', label: 'Register patient' },
@@ -69,6 +64,7 @@ export const PERMISSION_MODULES = {
     { key: 'manageLockedOutPatients', label: 'View / unlock locked-out patients' },
     { key: 'searchPatients', label: 'Search patients (by name, ID or mobile)' },
     { key: 'registerEmployee', label: 'Register employee' },
+    { key: 'manageMemberDetails', label: 'Search and correct patient / employee details' },
   ],
   RM: [
     { key: 'viewRoomCategories', label: 'View room categories' },
@@ -90,7 +86,6 @@ export const MODULE_LABELS = {
   L: 'Laboratory',
   P: 'Pharmacy',
   PAY: 'Payment',
-  PT: 'Patient',
   R: 'Reception',
   RM: 'Room',
 };
