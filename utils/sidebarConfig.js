@@ -18,6 +18,7 @@ export const SIDEBAR_GROUPS = [
       { label: 'Departments', path: '/admin/departments', icon: 'Domain', access: PAGE_ACCESS.departments },
       { label: 'Manage Roles', path: '/admin/roles', icon: 'ManageAccounts', access: PAGE_ACCESS.manageRoles },
       { label: 'Lockouts', path: '/admin/lockouts', icon: 'Lock', access: PAGE_ACCESS.lockouts },
+      { label: 'Logs', path: '/admin/logs', icon: 'History', access: PAGE_ACCESS.auditLogs },
     ],
   },
   {

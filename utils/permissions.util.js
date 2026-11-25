@@ -20,6 +20,7 @@ export const PERMISSION_MODULES = {
     { key: 'createRole', label: 'Create role' },
     { key: 'updateRole', label: 'Update role permissions' },
     { key: 'deleteRole', label: 'Delete role' },
+    { key: 'viewAuditLogs', label: 'View audit logs' },
   ],
   D: [
     { key: 'viewOpdQueue', label: 'View OPD queue' },

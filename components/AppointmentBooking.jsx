@@ -11,12 +11,13 @@ import { browserTimeZone, todayInputValue, zonedTimeToUtc } from '../utils/timeZ
  * appointment) passes its own set - keep that object STABLE (a module constant
  * or useMemo), because the doctor list is re-read when it changes.
  *
- *  getDoctors()                 -> [{ did, dname, dep, price, timezone }]
+ *  getDoctors(patientId)        -> [{ did, dname, dep, price, timezone }]  (without the doctors that patient already has an appointment with)
  *  getTimings(did, dateIso)     -> [{ timing: 'HH:mm', count: slotsLeft }]
  *  book({ pid, did, schedule_date, userTimezone }) -> resolves when booked
  */
 export const receptionBookingApi = {
-  getDoctors: async () => (await apis.getRequest('/reception/doctors'))?.doctors ?? [],
+  // the patient's id goes in the body: a doctor that patient already has an appointment with is not listed
+  getDoctors: async (patientId) => (await apis.postReadRequest('/reception/doctors', { pid: patientId }))?.doctors ?? [],
   getTimings: (did, dateIso) => apis.postReadRequest('/reception/getdoctorTimings', { did, date: dateIso }),
   book: (payload) => apis.postRequest('/reception/appointment', payload),
 };
@@ -42,13 +43,13 @@ export default function AppointmentBooking({ patientId, onBooked, api = receptio
   useEffect(() => {
     let cancelled = false;
     api
-      .getDoctors()
+      .getDoctors(patientId)
       .then((list) => !cancelled && setDoctors(list || []))
       .catch(() => !cancelled && setDoctors([]));
     return () => {
       cancelled = true;
     };
-  }, [api]);
+  }, [api, patientId]);
 
   const chooseDoctor = (next) => {
     setDoctor(next);

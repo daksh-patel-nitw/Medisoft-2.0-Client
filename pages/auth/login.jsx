@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import Grid from '@mui/material/Grid2';
 import {
   TextField,
@@ -101,6 +102,12 @@ export default function LoginPage() {
                 <CardActionButton type="submit" disabled={isLoggingIn}>
                   Login
                 </CardActionButton>
+              </Grid>
+
+              <Grid size={{ xs: 12 }} textAlign="center">
+                <Link href="/auth/reset-password" style={{ fontSize: 14 }}>
+                  Forgot password?
+                </Link>
               </Grid>
 
             </Grid>

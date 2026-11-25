@@ -18,6 +18,8 @@ export const PAGE_ACCESS = {
   manageRoles: { A: '00001000000000' },
   // A: viewLockouts (7)
   lockouts: { A: '00000001000000' },
+  // A: viewAuditLogs (14)
+  auditLogs: { A: '000000000000001' },
 
   // D: viewOpdQueue (0) + viewAppointmentHistory (1) + diagnoseOpd (2) + viewLabResults (3, the lab + medicine lists)
   doctorOpd: { D: '1111' },

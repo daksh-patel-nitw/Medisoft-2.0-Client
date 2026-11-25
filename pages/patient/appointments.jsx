@@ -154,10 +154,21 @@ function AppointmentPrescriptions({ aid }) {
   );
 }
 
+// Where an appointment stands (AppointmentStatus on the server). Upcoming ones are in the history too.
+const APPOINTMENT_STATUS = {
+  P: { label: 'Booked - not paid yet', color: 'warning' },
+  B: { label: 'Paid - waiting', color: 'info' },
+  I: { label: 'In the queue', color: 'info' },
+  D: { label: 'With the doctor', color: 'primary' },
+  Done: { label: 'Seen', color: 'success' },
+  C: { label: 'Cancelled', color: 'error' },
+  IPD: { label: 'Inpatient', color: 'primary' },
+};
+
 const TYPES = { opd: 'Outpatient (OPD)', ipd: 'Inpatient (IPD)' };
 
 /**
- * POST /patient/appointments/history { type, page } -> { appointments: [{ aid, dname, schedule_date }], totalPages, currentPage }
+ * POST /patient/appointments/history { type, page } -> { appointments: [{ aid, dname, schedule_date, status }], totalPages, currentPage }
  * The API returns them newest first, 10 per page.
  */
 function AppointmentList({ type }) {
@@ -202,11 +213,21 @@ function AppointmentList({ type }) {
         result.appointments.map((a) => (
           <Accordion key={a.aid} disableGutters variant="outlined" slotProps={{ transition: { unmountOnExit: true } }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Box>
-                <Typography fontWeight="bold">{formatDate(a.schedule_date)}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Dr. {a.dname}
-                </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap', width: '100%', pr: 1 }}>
+                <Box>
+                  <Typography fontWeight="bold">{formatDate(a.schedule_date)}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Dr. {a.dname}
+                  </Typography>
+                </Box>
+                {a.status && (
+                  <Chip
+                    size="small"
+                    color={APPOINTMENT_STATUS[a.status]?.color ?? 'default'}
+                    variant={a.status === 'C' ? 'outlined' : 'filled'}
+                    label={APPOINTMENT_STATUS[a.status]?.label ?? a.status}
+                  />
+                )}
               </Box>
             </AccordionSummary>
             <AccordionDetails>
