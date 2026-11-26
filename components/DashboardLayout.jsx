@@ -158,7 +158,7 @@ export default function DashboardLayout({ children, currentUser }) {
   // ==========================================
   const handleLogout = async () => {
     localStorage.clear();
-    await apis.getRequest('/auth/logout');
+    await apis.postRequest('/auth/logout');
     router.replace('/auth/login');
   };
 
