@@ -128,7 +128,10 @@ AppComponent.getInitialProps = async (appContext) => {
       }
 
       // 3. Make the auth check with the forwarded cookies
-      currentUser = await fetchCurrentUser(isServer ? { cookie } : {});
+      // On the Next server this call comes from the host, not the visitor, so the API would see the
+      // host's address for every visitor (shared rate limit, wrong audit IP). Pass the visitor's address on.
+      const forwardedFor = isServer ? appContext.ctx.req?.headers['x-forwarded-for'] : undefined;
+      currentUser = await fetchCurrentUser(isServer ? { cookie, ...(forwardedFor ? { 'x-forwarded-for': forwardedFor } : {}) } : {});
       if (currentUser) {
         console.log('Auth Success:', currentUser.name, ' User');
       }
