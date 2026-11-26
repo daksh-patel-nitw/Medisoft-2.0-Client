@@ -8,7 +8,7 @@ import axios from 'axios';
 import { hasAccess } from '../utils/permissions.util';
 import GlobalProgress from '../components/GlobalProgress';
 import AppFooter from '../components/AppFooter';
-import { apiBase } from '../services/apiBase';
+import { apiBase, proxyKeyHeader } from '../services/apiBase';
 
 // GET /users/currentuser with whatever cookies the caller can send.
 const fetchCurrentUser = async (headers = {}) => {
@@ -130,8 +130,11 @@ AppComponent.getInitialProps = async (appContext) => {
       // 3. Make the auth check with the forwarded cookies
       // On the Next server this call comes from the host, not the visitor, so the API would see the
       // host's address for every visitor (shared rate limit, wrong audit IP). Pass the visitor's address on.
-      const forwardedFor = isServer ? appContext.ctx.req?.headers['x-forwarded-for'] : undefined;
-      currentUser = await fetchCurrentUser(isServer ? { cookie, ...(forwardedFor ? { 'x-forwarded-for': forwardedFor } : {}) } : {});
+      // (Behind a proxy that header holds it; with no proxy in front the connection's own address is the visitor.)
+      const forwardedFor = isServer
+        ? appContext.ctx.req?.headers['x-forwarded-for'] || appContext.ctx.req?.socket?.remoteAddress
+        : undefined;
+      currentUser = await fetchCurrentUser(isServer ? { cookie, ...proxyKeyHeader(), ...(forwardedFor ? { 'x-forwarded-for': forwardedFor } : {}) } : {});
       if (currentUser) {
         console.log('Auth Success:', currentUser.name, ' User');
       }
